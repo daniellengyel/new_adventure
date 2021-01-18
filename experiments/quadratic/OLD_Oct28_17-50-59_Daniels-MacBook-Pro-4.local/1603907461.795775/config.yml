@@ -1,0 +1,19 @@
+domain_dim: 1
+domain_enforcer: null
+domain_enforcer_params: 0.2
+num_particles: 25
+num_steps: 10
+optimization_meta:
+  gamma: 0.1
+  sigma: 0.1
+optimization_name: OLD
+particle_init: uniform
+potential_meta:
+  Q:
+  - - 2
+potential_name: quadratic
+return_full_path: true
+seed: 0
+x_range:
+- -100
+- 100
