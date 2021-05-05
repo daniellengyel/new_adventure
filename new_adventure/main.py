@@ -1,8 +1,8 @@
 import autograd.numpy as np
 
-from utils import *
-from Functions import *
-from Optimizers import get_optimizer
+from .utils import *
+from .Functions import *
+from .Optimizers import get_optimizer
 
 import time
 
@@ -36,13 +36,14 @@ def optimize(config, verbose=False):
     
 
     for t in range(num_steps):
-        p_next = opt.update(p_curr, F, t)
+        print(t)
 
-        all_paths.append(p_curr)
-        p_curr = p_next
+        full_update_path = opt.update(p_curr, F, t)
+        all_paths.append(full_update_path)
+        p_curr = full_update_path[-1][0]
 
         # if (t % 50) == 0 and verbose:
         #     print("Iteration", t)
         #     print("diff", np.abs(func(x_next) - func(x_curr)))
-
-    return np.array(all_paths)
+        
+    return all_paths

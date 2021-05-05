@@ -1,17 +1,35 @@
-from Functions import *
-
+from .Functions import Quadratic, ShiftEstimation, Ackley, Linear
+from .Barriers import LogPolytopeBarrier
+import numpy as np
 
 def get_potential(config):
     # get potential
     if config["potential_name"] == "quadratic":
         potential_meta = config["potential_meta"]
         F = Quadratic(potential_meta["Q"])
+        if potential_meta["estimation_type"] == "shift_estimator":
+            F = ShiftEstimation(F, 0.1, np.eye(len(potential_meta["Q"])), 1000)
+    if config["potential_name"] == "linear":
+        potential_meta = config["potential_meta"]
+        # Set Linear Objective
+        c = potential_meta["c"]
+        F = Linear(c)
+        # if potential_meta["estimation_type"] == "shift_estimator":
+        #     F = ShiftEstimation(F, 0.1, np.eye(len(c)), 1000)
     elif config["potential_name"] == "Ackley":
         F = Ackley()
     else:
         raise ValueError("Does not support given function {}".format(config["potential_name"]))
     return F    
 
+def get_barrier(config):
+    if (config["optimization_meta"]["barrier_type"] == "log") and (config["domain_name"] == "Polytope"):
+        domain_meta = config["domain_meta"]
+        B = LogPolytopeBarrier(domain_meta["ws"], domain_meta["bs"])
+    else: 
+        raise ValueError("Does not support given barrier type {} with domain {}".format(config["optimization_meta"]["barrier_type"], config["domain_name"]))
+    return B
+    
 def get_particles(config):
     # get start_pos
     # TODO fix dimension
@@ -28,6 +46,9 @@ def get_particles(config):
         p = np.array(config["particle_init"]["params"]["position"])
         assert ((x_low <= p) & (p <= x_high)).all()
         particles = [p for _ in range(num_particles)]
+    elif config["particle_init"] == "origin":
+        num_particles = config["num_particles"]
+        particles = [np.zeros(config["domain_dim"]) for _ in range(num_particles)]
     else:
         raise ValueError("Does not support given function {}".format(config["particle_init"]))
     return np.array(particles)
