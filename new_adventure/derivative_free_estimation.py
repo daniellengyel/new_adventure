@@ -1,5 +1,6 @@
 import numpy as np
 import time
+import multiprocessing
 
 """Assume mu.shape = (d) and cov.shape = (d, d)"""
 
@@ -195,6 +196,36 @@ def new_beta_inverse_second_shift_estimator(F, x_0, alpha, N, control_variate=Tr
     print("get second inverse", time.time() - a)
     
     return sample_points_cov.dot(second_inv)
+
+def multi_second_shift_estimator_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid):
+    # Notice, we should be sharing the radius. So some lock is probably needed to synchronise 
+    sample_points = hit_run(x_0, F, x_0.shape[0], process_N, alpha)
+    # print(sample_points)
+    out_grads = F.f1(sample_points)
+    L_sample_points.append(sample_points)
+    L_grads.append(out_grads)
+
+def multi_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, num_processes=1):
+    manager = multiprocessing.Manager()
+    pool = multiprocessing.Pool(processes=num_processes)
+    L_sample_points = manager.list()
+    L_grads = manager.list()
+    pool_workers = []
+    for i in range(num_processes):
+        p = pool.apply_async(multi_second_shift_estimator_task, (x_0, F, N // num_processes, alpha, L_sample_points, L_grads, i,))
+        pool_workers.append(p)
+    
+    pool_workers = [p.wait() for p in pool_workers]
+
+    pool.close()
+    pool.join()
+
+    sample_points = np.vstack(list(L_sample_points))
+    out_grads = np.vstack(list(L_grads))
+    # print(sample_points)
+
+    second_shift_est = new_proper_cov(sample_points, out_grads)
+    return second_shift_est.dot(np.linalg.inv(np_new_cov(sample_points)))
 
 
 # Quadratic Regression

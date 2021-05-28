@@ -1,5 +1,5 @@
 import numpy as np
-from .derivative_free_estimation import first_shift_estimator, second_shift_estimator, first_estimator, beta_first_shift_estimator, beta_second_shift_estimator, new_beta_second_shift_estimator, new_beta_inverse_second_shift_estimator
+from .derivative_free_estimation import first_shift_estimator, second_shift_estimator, first_estimator, beta_first_shift_estimator, beta_second_shift_estimator, new_beta_second_shift_estimator, new_beta_inverse_second_shift_estimator, multi_beta_second_shift_estimator
 
 # We expect X to be a (N, d) array, where d is the dimensionality and N is the number of datapoints. 
 # The output is then then (N) dimensional. We are only working with scalar functions. 
@@ -59,9 +59,10 @@ class ShiftEstimation():
 
 
 class BetaShiftEstimation():
-    def __init__(self, F, N):
+    def __init__(self, F, N, num_processes=1):
         self.F = F
         self.N = N
+        self.num_processes = num_processes
     
     def f(self, x):
         return self.F.f(x)
@@ -76,7 +77,10 @@ class BetaShiftEstimation():
         if num_samples is None:
             num_samples = 3000
         alpha=3000
-        res = np.array([new_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True) for x_i in x])
+        if self.num_processes > 1:
+            res = np.array([multi_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True, num_processes=self.num_processes) for x_i in x])
+        else:
+            res = np.array([new_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True) for x_i in x])
         return res 
 
 

@@ -31,6 +31,7 @@ class Newton:
 class Newton_shift_est_IPM:
     def __init__(self, config):
         self.config = config
+        self.num_processes = config["num_processes"]
         self.barrier = get_barrier(config)
         self.c1 = config["optimization_meta"]["c1"]
         self.c2 = config["optimization_meta"]["c2"]
@@ -39,7 +40,7 @@ class Newton_shift_est_IPM:
     def update(self, X, F, time_step, full_path=True):
         t = 4 * (0.75)**(time_step) # (1.5)**(time_step)
         combined_F_pre = LinearCombination(F, self.barrier, [1, t])
-        combined_F = BetaShiftEstimation(combined_F_pre, 100)
+        combined_F = BetaShiftEstimation(combined_F_pre, 100, num_processes=self.num_processes)
 
         if full_path:
             full_path_arr = [(X.copy(), time.time())]
@@ -69,7 +70,7 @@ class Newton_shift_est_IPM:
                 
             if newton_decrement < self.delta:
                 break
-        print(F.f(X))
+        # print(F.f(X))
         if full_path:
             return full_path_arr
         return X

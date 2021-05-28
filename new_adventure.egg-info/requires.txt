@@ -1,5 +1,4 @@
 pyyaml
-ray[tune]
 numpy
 matplotlib
 pandas

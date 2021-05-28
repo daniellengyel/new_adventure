@@ -1,11 +1,12 @@
 README.md
 setup.py
+new_adventure/Barriers.py
 new_adventure/Functions.py
 new_adventure/Optimizers.py
 new_adventure/__init__.py
 new_adventure/animations.py
 new_adventure/derivative_free_estimation.py
-new_adventure/optimize.py
+new_adventure/main.py
 new_adventure/save_load.py
 new_adventure/utils.py
 new_adventure.egg-info/PKG-INFO

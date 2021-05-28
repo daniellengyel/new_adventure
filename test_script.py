@@ -1,4 +1,4 @@
-import new_adventure as na
+import new_adventure as new_adv
 import new_adventure.derivative_free_estimation as dfe
 import numpy as np
 import matplotlib.pyplot as plt
@@ -19,8 +19,8 @@ def f(i):
 def process_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid):
     x_0 = np.ones(dim) / np.linalg.norm(np.ones(dim))
 
-    print(process_N)
-    print(pid)
+    # print(process_N)
+    # print(pid)
     # Notice, we should be sharing the radius. So some lock is probably needed to synchronise 
     sample_points = dfe.hit_run(x_0, F, x_0.shape[0], process_N, alpha)
     out_grads = F.f1(sample_points)
@@ -28,7 +28,6 @@ def process_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid):
 #     L_grads.append(out_grads)
 
 def new_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, num_processes=1):
-
 
 
 #     with multiprocessing.Manager() as manager:
@@ -47,6 +46,7 @@ def new_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, num_
     for pw in pool_workers:
         a = time.time()
         pw.wait()
+        print(pw)
         print(time.time() - a)
 #     [pw.wait() for pw in pool_workers]
 #         print([pw.get(timeout=1) for pw in pool_workers])
@@ -65,18 +65,18 @@ dirs = np.random.normal(size=(num_barriers, dim)) # sample gaussian and normaliz
 ws = dirs/np.linalg.norm(dirs, axis=1).reshape(-1, 1)
 bs = np.ones(num_barriers)
 
-barrier = na.Barriers.LogPolytopeBarrier(ws, bs)
+barrier = new_adv.Barriers.LogPolytopeBarrier(ws, bs)
 
-F = na.Functions.Linear(np.ones(dim))
+F = new_adv.Functions.Linear(np.ones(dim))
 
-F = barrier # na.Functions.LinearCombination(F, barrier, [1, 1])
+F = barrier # new_adv.Functions.LinearCombination(F, barrier, [1, 1])
 
 xs = np.ones(dim) / np.linalg.norm(np.ones(dim))
 
 a = time.time()
-new_beta_second_shift_estimator(F, xs, 200, 10000, control_variate=True, num_processes=1)
+c = new_beta_second_shift_estimator(F, xs, 200, 1000, control_variate=True, num_processes=8)
 print(time.time() - a)
 
 a = time.time()
-new_beta_second_shift_estimator(F, xs, 200, 10000, control_variate=True, num_processes=2)
+c = new_beta_second_shift_estimator(F, xs, 200, 1000, control_variate=True, num_processes=4)
 print(time.time() - a)
