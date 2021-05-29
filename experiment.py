@@ -31,7 +31,7 @@ config = {}
 
 # TODO add dim parameter
 np.random.seed(10)
-dim = 1500
+dim = 750
 num_barriers = dim * 4
 dirs = np.random.normal(size=(num_barriers, dim)) # sample gaussian and normalize 
 ws = dirs/np.linalg.norm(dirs, axis=1).reshape(-1, 1)
@@ -66,7 +66,7 @@ config["domain_meta"] = {"ws": ws, "bs": bs}
 
 config["seed"] = 0
 config["return_full_path"] = True
-config["num_steps"] = 15
+config["num_steps"] = 2
 config["num_processes"] = 6
 
 

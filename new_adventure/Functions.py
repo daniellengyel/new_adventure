@@ -68,15 +68,15 @@ class BetaShiftEstimation():
         return self.F.f(x)
 
     def f1(self, x):
-        num_runs = 500
-        alpha=10
+        num_runs = 1500
+        alpha=1000
         # res = np.array([beta_first_shift_estimator(self.F, x_i, alpha, num_runs, control_variate=True) for x_i in x])
         return self.F.f1(x) 
 
     def f2(self, x, num_samples = None):
         if num_samples is None:
-            num_samples = 3000
-        alpha=3000
+            num_samples = 1500
+        alpha=1000
         if self.num_processes > 1:
             res = np.array([multi_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True, num_processes=self.num_processes) for x_i in x])
         else:

@@ -1,6 +1,15 @@
 import numpy as np
 import time
 import multiprocessing
+import random 
+
+def set_seed(seed):
+    if seed is None:
+        seed = 0
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
+    np.random.seed(seed)
+    random.seed(seed)
 
 """Assume mu.shape = (d) and cov.shape = (d, d)"""
 
@@ -197,7 +206,8 @@ def new_beta_inverse_second_shift_estimator(F, x_0, alpha, N, control_variate=Tr
     
     return sample_points_cov.dot(second_inv)
 
-def multi_second_shift_estimator_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid):
+def multi_second_shift_estimator_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid, seed=0):
+    set_seed(seed)
     # Notice, we should be sharing the radius. So some lock is probably needed to synchronise 
     sample_points = hit_run(x_0, F, x_0.shape[0], process_N, alpha)
     # print(sample_points)
@@ -212,7 +222,8 @@ def multi_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, nu
     L_grads = manager.list()
     pool_workers = []
     for i in range(num_processes):
-        p = pool.apply_async(multi_second_shift_estimator_task, (x_0, F, N // num_processes, alpha, L_sample_points, L_grads, i,))
+        curr_seed = random.randint(0, 10000)
+        p = pool.apply_async(multi_second_shift_estimator_task, (x_0, F, N // num_processes, alpha, L_sample_points, L_grads, i, curr_seed))
         pool_workers.append(p)
     
     pool_workers = [p.wait() for p in pool_workers]
@@ -222,8 +233,6 @@ def multi_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, nu
 
     sample_points = np.vstack(list(L_sample_points))
     out_grads = np.vstack(list(L_grads))
-    # print(sample_points)
-
     second_shift_est = new_proper_cov(sample_points, out_grads)
     return second_shift_est.dot(np.linalg.inv(np_new_cov(sample_points)))
 

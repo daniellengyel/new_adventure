@@ -1,6 +1,7 @@
 from .Functions import Quadratic, ShiftEstimation, Ackley, Linear
 from .Barriers import LogPolytopeBarrier
 import numpy as np
+import random
 
 def get_potential(config):
     # get potential

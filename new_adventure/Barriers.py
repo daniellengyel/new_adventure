@@ -54,3 +54,6 @@ class LogPolytopeBarrier:
     def f2_inv(self, x):
         f2 = self.f2(x)
         return np.array([np.linalg.inv(f2[i]) for i in range(len(f2))])
+
+
+        
