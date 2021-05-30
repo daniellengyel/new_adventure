@@ -54,6 +54,7 @@ class Newton_shift_est_IPM:
             newton_decrement_squared = -f1[0].dot(search_direction)
             print(newton_decrement_squared)
             print(F.f(X))
+
             if newton_decrement_squared < 0:
                 if full_path:
                     full_path_arr.append((X.copy(), time.time()))
@@ -100,7 +101,6 @@ class Newton_IPM:
             newton_decrement = np.sqrt(-f1[0].dot(search_direction))
             print(newton_decrement**2)
             print(F.f(X))
-            print(combined_F.f(X))
 
             # Check if completed
             if newton_decrement**2 < self.delta:
