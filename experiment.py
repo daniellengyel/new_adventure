@@ -66,8 +66,8 @@ config["domain_meta"] = {"ws": ws, "bs": bs}
 
 config["seed"] = 0
 config["return_full_path"] = True
-config["num_steps"] = 2
-config["num_processes"] = 6
+config["num_steps"] = 15
+config["num_processes"] = 32
 
 
 # --- Set up folder in which to store all results ---
