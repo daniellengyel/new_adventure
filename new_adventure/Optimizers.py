@@ -4,6 +4,7 @@ import pickle
 from .Functions import LinearCombination, ShiftEstimation, BetaShiftEstimation
 from .utils import get_barrier
 from .derivative_free_estimation import BFGS_update
+import multiprocessing
 
 def get_optimizer(config):
     if "Newton" == config["optimization_name"]:
@@ -36,18 +37,23 @@ class Newton_shift_est_IPM:
         self.c1 = config["optimization_meta"]["c1"]
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
+        self.beta_estimation = BetaShiftEstimation(None, 100, num_processes=self.num_processes)
+
 
     def update(self, X, F, time_step, full_path=True):
         t = 4 * (0.75)**(time_step) # (1.5)**(time_step)
         combined_F_pre = LinearCombination(F, self.barrier, [1, t])
-        combined_F = BetaShiftEstimation(combined_F_pre, 100, num_processes=self.num_processes)
+        self.beta_estimation.F = combined_F_pre
+        combined_F = self.beta_estimation
 
         if full_path:
             full_path_arr = [(X.copy(), time.time())]
         
         while True:
-        # for _ in range(50):
+            a_time = time.time()
             H_inv = combined_F.f2_inv(X)
+            print(time.time() - a_time)
+            
             f1 = combined_F.f1(X)
 
             search_direction = -H_inv[0].dot(f1[0])
@@ -100,13 +106,14 @@ class Newton_IPM:
             search_direction = -H_inv[0].dot(f1[0])
             newton_decrement = np.sqrt(-f1[0].dot(search_direction))
             print(newton_decrement**2)
+            print(self.barrier.f(X))
             print(F.f(X))
 
             # Check if completed
             if newton_decrement**2 < self.delta:
                 break
 
-            alpha = 1/(1 + newton_decrement) # linesearch(combined_F, X[i], search_direction, self.c1, self.c2)
+            alpha = linesearch(combined_F, X[0], 1/(1 + newton_decrement) * search_direction, self.c1, self.c2) # 1/(1 + newton_decrement) #
             X[0] = X[0] + alpha * search_direction
             if full_path:
                 full_path_arr.append((X.copy(), time.time()))

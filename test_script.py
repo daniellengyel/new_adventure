@@ -12,55 +12,33 @@ from os import getpid
 
 
 
-def f(i):
-    print(i)
-    return 1
-
-def process_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid):
+def multi_second_shift_estimator_task(x_0, F, process_N, alpha):
     x_0 = np.ones(dim) / np.linalg.norm(np.ones(dim))
-
-    # print(process_N)
-    # print(pid)
     # Notice, we should be sharing the radius. So some lock is probably needed to synchronise 
     sample_points = dfe.hit_run(x_0, F, x_0.shape[0], process_N, alpha)
     out_grads = F.f1(sample_points)
-#     L_sample_points.append(sample_points)
-#     L_grads.append(out_grads)
+    return sample_points, out_grads
 
-def new_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, num_processes=1):
+def new_beta_second_shift_estimator(F, x_0, alpha, N, num_processes=1, pool=None):
+    if pool is None:
+        pool = multiprocessing.Pool(num_processes)
+    args = [[None, F, N//num_processes, alpha] for _ in range(num_processes)]
+    ret = pool.starmap(multi_second_shift_estimator_task, args)
+    
+    sample_points = []
+    out_grads = []
+    for r in ret:
+        sample_points.append(r[0])
+        out_grads.append(r[1])
+    sample_points = np.vstack(sample_points)
+    out_grads = np.vstack(out_grads)
 
-
-#     with multiprocessing.Manager() as manager:
-    manager = multiprocessing.Manager()
-    pool = multiprocessing.Pool(processes=num_processes)
-    L_sample_points = None # [] #manager.list()
-    L_grads = None # [] #manager.list()
-    pool_workers = []
-    for i in range(num_processes):
-#             p = pool.apply_async(f, (i,))
-        p = pool.apply_async(process_task, (None, F, N // num_processes, alpha, L_sample_points, L_grads, i,))
-        pool_workers.append(p)
-#         p.wait()
-#             print(i)
-#         print(pool_workers)
-    for pw in pool_workers:
-        a = time.time()
-        pw.wait()
-        print(pw)
-        print(time.time() - a)
-#     [pw.wait() for pw in pool_workers]
-#         print([pw.get(timeout=1) for pw in pool_workers])
-
-
-#         sample_points = np.vstack(list(L_sample_points))
-#         out_grads = np.vstack(list(L_grads))
-
-#     second_shift_est = dfe.new_proper_cov(sample_points, out_grads)
-#     return second_shift_est.dot(np.linalg.inv(dfe.np_new_cov(sample_points)))
+    second_shift_est = dfe.new_proper_cov(sample_points, out_grads)
+    return second_shift_est.dot(np.linalg.inv(dfe.np_new_cov(sample_points)))
 
 np.random.seed(10)
-dim = 2500
-num_barriers = dim * 2
+dim = 50
+num_barriers = 2**12
 dirs = np.random.normal(size=(num_barriers, dim)) # sample gaussian and normalize 
 ws = dirs/np.linalg.norm(dirs, axis=1).reshape(-1, 1)
 bs = np.ones(num_barriers)
@@ -73,10 +51,13 @@ F = barrier # new_adv.Functions.LinearCombination(F, barrier, [1, 1])
 
 xs = np.ones(dim) / np.linalg.norm(np.ones(dim))
 
-a = time.time()
-c = new_beta_second_shift_estimator(F, xs, 200, 1000, control_variate=True, num_processes=8)
-print(time.time() - a)
+times = []
+for _ in range(1, 32):
+    pool = multiprocessing.Pool(_)
+    new_beta_second_shift_estimator(F, xs, 200, 5000, num_processes=_, pool=pool)
 
-a = time.time()
-c = new_beta_second_shift_estimator(F, xs, 200, 1000, control_variate=True, num_processes=4)
-print(time.time() - a)
+    start_time = time.time()
+    new_beta_second_shift_estimator(F, xs, 200, 5000, num_processes=_, pool=pool)
+    times.append(time.time() - start_time)
+
+print(times)

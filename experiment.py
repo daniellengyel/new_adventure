@@ -10,7 +10,11 @@ import psutil
 
 import new_adventure as new_adv
 
-print(psutil.cpu_count(logical=False))
+# Job specific 
+try:
+    ARRAY_INDEX = int(os.environ["PBS_ARRAY_INDEX"]) - 1
+except:
+    ARRAY_INDEX = -1
 
 def experiment_run(config_inp, path):
     # setup saveing and save config
@@ -31,8 +35,8 @@ config = {}
 
 # TODO add dim parameter
 np.random.seed(11)
-dim = 750
-num_barriers = dim * 8
+dim = 50
+num_barriers = 4000
 dirs = np.random.normal(size=(num_barriers, dim)) # sample gaussian and normalize 
 ws = dirs/np.linalg.norm(dirs, axis=1).reshape(-1, 1)
 bs = np.ones(num_barriers)
@@ -49,7 +53,14 @@ config["potential_name"] = "linear"
 config["potential_meta"] = {"c": np.ones(dim)} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
 
 # optimization
-config["optimization_name"] = "Newton_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
+config["optimization_name"] = "Newton_IPM"
+# if ARRAY_INDEX == 0:
+#     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
+# elif ARRAY_INDEX == 1:
+#     config["optimization_name"] = "BFGS"
+# else:
+#     config["optimization_name"] = "Newton_IPM"
+
 config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, 
 								"barrier_type": "log", "delta": 0.01}
 
@@ -67,7 +78,7 @@ config["domain_meta"] = {"ws": ws, "bs": bs}
 config["seed"] = 0
 config["return_full_path"] = True
 config["num_steps"] = 15
-config["num_processes"] = 1
+config["num_processes"] = 32
 
 
 # --- Set up folder in which to store all results ---

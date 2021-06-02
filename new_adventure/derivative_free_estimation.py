@@ -2,6 +2,8 @@ import numpy as np
 import time
 import multiprocessing
 import random 
+from jax import random as jrandom
+import jax.numpy as jnp
 
 def set_seed(seed):
     if seed is None:
@@ -13,114 +15,30 @@ def set_seed(seed):
 
 """Assume mu.shape = (d) and cov.shape = (d, d)"""
 
-    
-def doucet_is_expectation(xs, weights):
-    """xs.shape = (N, d) and weights.shape = (N)"""
-    return xs.T.dot(weights) / np.sum(weights)
-
-
-def first_shift_estimator(F, mu, cov, tau, N, control_variate=True):
-    sample_points = np.random.multivariate_normal(mu, tau**2 * cov, N)
-
-    out_points = np.exp(F.f(sample_points))
-    is_exp = doucet_is_expectation(sample_points, out_points) 
-    if control_variate:
-        is_exp -= np.mean(sample_points, axis=0)
-    else:
-        is_exp -= mu
-    return 1./(tau**2) * np.linalg.inv(cov).dot(is_exp)
-
-def first_estimator(F, mu, cov, tau, N, control_variate=True):
-    sample_points = np.random.multivariate_normal(mu, tau**2 * cov, N)
-
-    out_points = F.f(sample_points)
-    if control_variate:
-        is_exp = np.mean((sample_points - np.mean(sample_points, axis=0)).T * out_points, axis=1).T
-    else:
-        is_exp = np.mean((sample_points - mu).T * out_points, axis=1).T
-
-    return 1./(tau**2) * np.linalg.inv(cov).dot(is_exp)
-
-
-def second_shift_estimator(F, mu, cov, tau, N, control_variate=True):
-    sample_points = np.random.multivariate_normal(mu, tau**2 * cov, N)
-    out_points = np.exp(F.f(sample_points)) # weights
-    # is_var = costum(sample_points, out_points)
-    # print(is_var)
-    is_var = np.cov(sample_points.T, aweights=out_points, ddof=0).reshape(len(mu), len(mu)) # no normalization constant as in the paper
-    # print(is_var)
-    if control_variate:
-        is_var -= np.cov(sample_points.T, ddof=0)
-    else:
-        is_var -= tau**2 * cov
-    return 1./(tau**4) * np.linalg.inv(cov).dot(is_var).dot(np.linalg.inv(cov))
-
-def second_estimator(F, mu, cov, tau, N, control_variate=True):
-    sample_points = np.random.multivariate_normal(mu, tau**2 * cov, N)
-    out_points = F.f(sample_points) # weights
-    # is_var = costum(sample_points, out_points)
-    # print(is_var)
-    # is_var = np.cov(sample_points.T, aweights=out_points, ddof=0).reshape(len(mu), len(mu)) # no normalization constant as in the paper
-    # print(is_var)
-    if control_variate:
-        is_var = np.cov((sample_points).T, aweights=out_points, ddof=0).reshape(len(mu), len(mu)) 
-    else:
-        # print(np.mean(out_points) * tau**2)
-        # print(costum2(sample_points, mu, out_points))
-        # print(np.cov(sample_points.T, aweights=out_points, ddof=0).reshape(len(mu), len(mu)) * np.sum(out_points) / float(N))
-        # print()
-        is_var = costum2(sample_points, mu, out_points) - tau**2 * np.cov(sample_points.T, ddof=0) * np.mean(out_points)
-        # print(is_var)
-        # is_var = np.cov(sample_points.T, aweights=out_points, ddof=0).reshape(len(mu), len(mu)) * np.sum(out_points) / float(N) - tau**2 * np.cov(sample_points.T, ddof=0) * np.mean(out_points)  # tau**2 * cov
-        # print(is_var)
-
-    return 1./(tau**4) * np.linalg.inv(cov).dot(is_var).dot(np.linalg.inv(cov))
-
-def costum(xs, weights):
-    """xs.shape = (N, d), weights.shape = (N)"""
-    weights /= np.sum(weights) 
-    xs_adjusted = (xs.T - np.sum(xs.T * weights, axis=1)).T
-    outer_adjusted = np.array([np.outer(x_adjusted, x_adjusted) for x_adjusted in xs_adjusted])
-    res = None
-    for i, o in enumerate(outer_adjusted): 
-        if res is None:
-            res = weights[i] * o
-        else:
-            res += weights[i] * o
-    return res
-
-def costum2(xs, mu, weights):
-    """xs.shape = (N, d), weights.shape = (N), mu.shape = (d)"""
-    xs_adjusted = (xs.T - mu).T
-    outer_adjusted = np.array([np.outer(x_adjusted, x_adjusted) for x_adjusted in xs_adjusted])
-    res = None
-    for i, o in enumerate(outer_adjusted): 
-        if res is None:
-            res = weights[i] * o
-        else:
-            res += weights[i] * o
-    return res/len(weights)
-
-########
 
 def hit_run(x_0, barrier, dim, N, alpha):
-    # a = time.time()
     dirs = np.random.normal(size=(N, dim)) # sample gaussian and normalize 
     dirs = dirs/np.linalg.norm(dirs, axis=1).reshape(-1, 1)
-    # print("Got dirs", time.time() - a)
-    # a = time.time()
     dists = barrier.dir_dists(x_0, dirs) # for each dir get distance to boundary
     radius = np.min(dists[0])
-    # print("Got rad", time.time() - a)
-    # a = time.time()
     beta_p = (np.random.beta(alpha, alpha, size=(N, 1)) - 0.5) * 2 * radius 
-    # print("rest", time.time() - a)
+    return x_0 + dirs * beta_p
+
+def jax_hit_run(x_0, barrier, dim, N, alpha, key):
+    key, subkey = randomj.split(key)
+    dirs = jrandom.normal(subkey, shape=(N, dim)) # sample gaussian and normalize 
+    dirs = dirs/jnp.linalg.norm(dirs, axis=1).reshape(-1, 1)
+    dists = barrier.dir_dists(x_0, dirs) # for each dir get distance to boundary
+    radius = jnp.min(dists[0])
+
+    key, subkey = randomj.split(key)
+    beta_p = (jrandom.beta(subkey, alpha, alpha, shape=(N, 1)) - 0.5) * 2 * radius 
     return x_0 + dirs * beta_p
 
 
 def is_expectation(xs, weights):
     """xs.shape = (N, d) and weights.shape = (N)"""
-    return xs.T.dot(weights) / xs.shape[0] # / np.sum(weights)
+    return xs.T.dot(weights) / xs.shape[0]
 
 
 def beta_first_shift_estimator(F, x_0, alpha, N, control_variate=True):
@@ -128,39 +46,6 @@ def beta_first_shift_estimator(F, x_0, alpha, N, control_variate=True):
     out_points = F.f(sample_points)
     is_exp = is_expectation(sample_points - np.mean(sample_points, axis=0), out_points)
     return np.linalg.inv(np.cov(sample_points.T)).dot(is_exp) #* (8 * a + 4) / (2*radius)**3
-
-def get_A(xs):
-    """xs.shape = [N, d]"""
-    xs -= np.mean(xs, axis=0)
-    curr_m = None
-    for i in range(len(xs)):
-        if curr_m is None:
-            curr_m = np.outer(xs[i]**2, xs[i]**2)
-        else:
-            curr_m += np.outer(xs[i]**2, xs[i]**2)
-    curr_m = curr_m / len(xs)
-    return curr_m
-
-def proper_cov(xs, weights):
-    """xs.shape = [N, d]"""
-    xs -= np.mean(xs, axis=0)
-    curr_m = None
-    for i in range(len(xs)):
-        if curr_m is None:
-            curr_m = np.outer(xs[i], xs[i])*weights[i]
-        else:
-            curr_m += np.outer(xs[i], xs[i])*weights[i]
-    curr_m /= len(xs)
-    return curr_m
-
-
-def beta_second_shift_estimator(barrier, x_0, alpha, N, control_variate=True):
-    sample_points = hit_run(x_0, barrier, x_0.shape[0], N, alpha)
-    out_points = barrier.f(sample_points)
-    second_shift_est = proper_cov(sample_points, out_points)
-    second_shift_est -= barrier.f(x_0.reshape(1, -1)) * np.cov(sample_points.T)
-    A = get_A(sample_points)
-    return 2*((second_shift_est - np.eye(len(x_0)) * np.diag(second_shift_est))/(A*2.) + np.eye(len(x_0)) * np.linalg.inv(A).dot(np.diag(second_shift_est)))
 
 def new_proper_cov(xs, grads):
     """xs.shape = [N, d], grads = [N, d]"""
@@ -170,54 +55,26 @@ def np_new_cov(xs):
     return np.dot((xs - np.mean(xs, axis=0)).T, xs  - np.mean(xs, axis=0))/len(xs)
 
 def new_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, estimated_gradient=False):
-    sample_points = hit_run(x_0, F, x_0.shape[0], N, alpha)
-    # print(F.f1(sample_points).shape) 
-    # print(beta_first_shift_estimator(F, x_0, alpha, N*2, control_variate=True).shape)
-    # if estimated_gradient:
-    #     out_grads = [beta_first_shift_estimator(F, x, alpha, 2*N, control_variate=True) for x in sample_points] # 
-    # else:
-    #     
+    # Note, i could not invert the cov at the end to save inversion of the Hessian.
+    sample_points = hit_run(x_0, F, x_0.shape[0], N, alpha)   
     out_grads = F.f1(sample_points)
     second_shift_est = new_proper_cov(sample_points, out_grads)
     return second_shift_est.dot(np.linalg.inv(np_new_cov(sample_points)))
 
-def new_beta_inverse_second_shift_estimator(F, x_0, alpha, N, control_variate=True, estimated_gradient=False):
-    a = time.time()
-    sample_points = hit_run(x_0, F, x_0.shape[0], N, alpha)
-    print("sampling points", time.time() - a)
-    a = time.time()
-
-    if estimated_gradient:
-        out_grads = [beta_first_shift_estimator(F, x, alpha, 2*N, control_variate=True) for x in sample_points] # 
-    else:
-        out_grads = F.f1(sample_points)
-    print("Get grads", time.time() - a) 
-    a = time.time()
-    second_shift_est = new_proper_cov(sample_points, out_grads)
-    print("Get second shift est", time.time() - a)
-    a = time.time()
-
-    sample_points_cov = np.cov(sample_points.T)
-    
-    print("get sample cov", time.time() - a)
-    a = time.time()
-    second_inv = np.linalg.inv(second_shift_est)
-    print("get second inverse", time.time() - a)
-    
-    return sample_points_cov.dot(second_inv)
 
 def multi_second_shift_estimator_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid, seed=0):
     set_seed(seed)
-    # Notice, we should be sharing the radius. So some lock is probably needed to synchronise 
+    # Notice, we should be sharing the radius. Lock is needed to synchronise 
     sample_points = hit_run(x_0, F, x_0.shape[0], process_N, alpha)
-    # print(sample_points)
     out_grads = F.f1(sample_points)
     L_sample_points.append(sample_points)
     L_grads.append(out_grads)
 
-def multi_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, num_processes=1):
+def multi_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, num_processes=1, pool=None):
     manager = multiprocessing.Manager()
-    pool = multiprocessing.Pool(processes=num_processes)
+    if pool is None:
+        pool = multiprocessing.Pool(processes=num_processes)
+        
     L_sample_points = manager.list()
     L_grads = manager.list()
     pool_workers = []

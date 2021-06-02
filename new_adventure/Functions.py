@@ -1,5 +1,6 @@
 import numpy as np
-from .derivative_free_estimation import first_shift_estimator, second_shift_estimator, first_estimator, beta_first_shift_estimator, beta_second_shift_estimator, new_beta_second_shift_estimator, new_beta_inverse_second_shift_estimator, multi_beta_second_shift_estimator
+from .derivative_free_estimation import new_beta_second_shift_estimator, multi_beta_second_shift_estimator
+import multiprocessing
 
 # We expect X to be a (N, d) array, where d is the dimensionality and N is the number of datapoints. 
 # The output is then then (N) dimensional. We are only working with scalar functions. 
@@ -22,55 +23,21 @@ class Linear:
     def f2(self, X):
         return np.tile(np.array([0]), (X.shape[0], X.shape[1], X.shape[1]))  #/ float(len(self.c))
 
-class ShiftEstimation():
-    def __init__(self, F, tau, cov, N):
-        self.F = F
-        self.tau = tau
-        self.cov = cov
-        self.N = N
-    
-    def f(self, x):
-        return self.F.f(x)
-
-    def f1(self, x):
-        num_runs = 100
-        res = None
-        for _ in range(num_runs):
-            if res is None:
-                res = np.array([first_estimator(self.F, x_i, self.cov, self.tau, self.N, control_variate=True) for x_i in x])
-            else:
-                res += np.array([first_estimator(self.F, x_i, self.cov, self.tau, self.N, control_variate=True) for x_i in x])
-        return res / num_runs # np.array([first_shift_estimator(self.F, x_i, self.cov, self.tau, self.N, control_variate=True) for x_i in x])
-
-    def f2(self, x):
-        num_runs = 1
-        res = None
-        for _ in range(num_runs):
-            if res is None:
-                res = np.array([second_shift_estimator(self.F, x_i, self.cov, self.tau, self.N, control_variate=True) for x_i in x])
-            else:
-                res += np.array([second_shift_estimator(self.F, x_i, self.cov, self.tau, self.N, control_variate=True) for x_i in x])
-        return res / num_runs
-
-
-    def f2_inv(self, x):
-        f2 = self.f2(x)
-        return np.array([np.linalg.inv(f2[i]) for i in range(len(f2))])
-
-
 class BetaShiftEstimation():
     def __init__(self, F, N, num_processes=1):
         self.F = F
         self.N = N
         self.num_processes = num_processes
-    
+        self.pool = None
+        if config["num_processes"] > 1:
+            self.pool = multiprocessing.Pool(processes=config["num_processes"])
+
     def f(self, x):
         return self.F.f(x)
 
     def f1(self, x):
         num_runs = 1500
         alpha=1000
-        # res = np.array([beta_first_shift_estimator(self.F, x_i, alpha, num_runs, control_variate=True) for x_i in x])
         return self.F.f1(x) 
 
     def f2(self, x, num_samples = None):
@@ -78,7 +45,7 @@ class BetaShiftEstimation():
             num_samples = 5000
         alpha=1000
         if self.num_processes > 1:
-            res = np.array([multi_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True, num_processes=self.num_processes) for x_i in x])
+            res = np.array([multi_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True, num_processes=self.num_processes, pool=self.pool) for x_i in x])
         else:
             res = np.array([new_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True) for x_i in x])
         return res 
@@ -87,34 +54,7 @@ class BetaShiftEstimation():
     def f2_inv(self, x, num_samples = None):
         f2 = self.f2(x, num_samples)
         return np.array([np.linalg.inv(f2[i]) for i in range(len(f2))])
-        # num_runs = 1000
-        # alpha=1000
-        # res = np.array([new_beta_inverse_second_shift_estimator(self.F, x_i, alpha, num_runs, control_variate=True) for x_i in x])
-        # return res 
-
-# class BFGSEstimation():
-#     """Only works with one particle"""
-#     def __init__(self, F, H_inv_approx=None):
-#         self.F = F
-#         self.H_inv = H_inv_approx
-    
-#     def f(self, x):
-#         return self.F.f(x)
-
-#     def f1(self, x):
-#         return self.F.f1(x) 
-
-#     def f2(self, x):
-#         H_inv = self.f2_inv(x)
-#         res = np.array([np.linalg.inv(H_inv[i]) for i in range(len(x))])
-#         return res 
-
-
-#     def f2_inv(self, x):
-#         if self.H_inv is None:
-#             self.H_inv = np.dim(x.shape[1])        
-
-#         return 
+       
 
    
 class Quadratic:
