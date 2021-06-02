@@ -2,8 +2,8 @@
 
 import numpy as np
 import time
-import jax.numpy as jnp
-import jax
+# import jax.numpy as jnp
+# import jax
 
 class LogPolytopeBarrier:
 
