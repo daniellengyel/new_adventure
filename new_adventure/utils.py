@@ -1,4 +1,4 @@
-from .Functions import Quadratic, ShiftEstimation, Ackley, Linear
+from .Functions import Quadratic, Ackley, Linear
 from .Barriers import LogPolytopeBarrier
 import numpy as np
 import random

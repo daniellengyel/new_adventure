@@ -34,9 +34,9 @@ def experiment_run(config_inp, path):
 config = {}
 
 # TODO add dim parameter
-np.random.seed(11)
-dim = 50
-num_barriers = 4000
+np.random.seed(10)
+dim = 750
+num_barriers = dim * 2
 dirs = np.random.normal(size=(num_barriers, dim)) # sample gaussian and normalize 
 ws = dirs/np.linalg.norm(dirs, axis=1).reshape(-1, 1)
 bs = np.ones(num_barriers)
@@ -62,7 +62,7 @@ config["optimization_name"] = "Newton_IPM"
 #     config["optimization_name"] = "Newton_IPM"
 
 config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, 
-								"barrier_type": "log", "delta": 0.01}
+								"barrier_type": "log", "delta": 0.1, "jrandom_key": 0}
 
 
 config["domain_name"] = "Polytope"
@@ -78,8 +78,6 @@ config["domain_meta"] = {"ws": ws, "bs": bs}
 config["seed"] = 0
 config["return_full_path"] = True
 config["num_steps"] = 15
-config["num_processes"] = 32
-
 
 # --- Set up folder in which to store all results ---
 folder_name = new_adv.save_load.get_file_stamp(config["optimization_name"])

@@ -1,4 +1,5 @@
 import numpy as np
+import jax.numpy as jnp
 from .derivative_free_estimation import new_beta_second_shift_estimator, multi_beta_second_shift_estimator
 import multiprocessing
 
@@ -24,13 +25,9 @@ class Linear:
         return np.tile(np.array([0]), (X.shape[0], X.shape[1], X.shape[1]))  #/ float(len(self.c))
 
 class BetaShiftEstimation():
-    def __init__(self, F, N, num_processes=1):
+    def __init__(self, F, N):
         self.F = F
         self.N = N
-        self.num_processes = num_processes
-        self.pool = None
-        if config["num_processes"] > 1:
-            self.pool = multiprocessing.Pool(processes=config["num_processes"])
 
     def f(self, x):
         return self.F.f(x)
@@ -40,19 +37,15 @@ class BetaShiftEstimation():
         alpha=1000
         return self.F.f1(x) 
 
-    def f2(self, x, num_samples = None):
+    def f2(self, x, num_samples=None, jrandom_key=None):
         if num_samples is None:
             num_samples = 5000
         alpha=1000
-        if self.num_processes > 1:
-            res = np.array([multi_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True, num_processes=self.num_processes, pool=self.pool) for x_i in x])
-        else:
-            res = np.array([new_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, control_variate=True) for x_i in x])
-        return res 
+        res = np.array([new_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, jrandom_key=jrandom_key) for x_i in x])
 
 
-    def f2_inv(self, x, num_samples = None):
-        f2 = self.f2(x, num_samples)
+    def f2_inv(self, x, num_samples = None, jrandom_key=None):
+        f2 = self.f2(x, num_samples, jrandom_key)
         return np.array([np.linalg.inv(f2[i]) for i in range(len(f2))])
        
 
@@ -164,20 +157,20 @@ class LinearCombination():
         self.weights = weights
 
     def f(self, X):
-        res = np.sum([w*f.f(X) for w, f in zip(self.weights, self.funcs)], axis=0)
+        res = jnp.sum(jnp.array([jnp.multiply(w, f.f(X)) for w, f in zip(self.weights, self.funcs)]), axis=0)
         return res
 
     def f1(self, X):
-        res = np.sum([w*f.f1(X) for w, f in zip(self.weights, self.funcs)], axis=0)
+        res = jnp.sum(jnp.array([jnp.multiply(w, f.f1(X)) for w, f in zip(self.weights, self.funcs)]), axis=0)
         return res
 
     def f2(self, X):
-        res = np.sum([w*f.f2(X) for w, f in zip(self.weights, self.funcs)], axis=0)
+        res = jnp.sum(jnp.array([jnp.multiply(w, f.f2(X)) for w, f in zip(self.weights, self.funcs)]), axis=0)
         return res
 
     def f2_inv(self, X):
-        pre_inv = np.array(self.f2(X))
-        return np.array([np.linalg.inv(pre_inv[i]) for i in range(len(pre_inv))])
+        pre_inv = jnp.array(self.f2(X))
+        return jnp.array([jnp.linalg.inv(pre_inv[i]) for i in range(len(pre_inv))])
 
     def dir_dists(self, xs, dirs):
         return self.barrier.dir_dists(xs, dirs)

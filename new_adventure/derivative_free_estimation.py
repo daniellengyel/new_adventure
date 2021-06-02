@@ -25,13 +25,13 @@ def hit_run(x_0, barrier, dim, N, alpha):
     return x_0 + dirs * beta_p
 
 def jax_hit_run(x_0, barrier, dim, N, alpha, key):
-    key, subkey = randomj.split(key)
+    key, subkey = jrandom.split(key)
     dirs = jrandom.normal(subkey, shape=(N, dim)) # sample gaussian and normalize 
     dirs = dirs/jnp.linalg.norm(dirs, axis=1).reshape(-1, 1)
     dists = barrier.dir_dists(x_0, dirs) # for each dir get distance to boundary
     radius = jnp.min(dists[0])
 
-    key, subkey = randomj.split(key)
+    key, subkey = jrandom.split(key)
     beta_p = (jrandom.beta(subkey, alpha, alpha, shape=(N, 1)) - 0.5) * 2 * radius 
     return x_0 + dirs * beta_p
 
@@ -52,17 +52,17 @@ def new_proper_cov(xs, grads):
     return grads.T.dot(xs - np.mean(xs, axis=0))/len(xs) # np.einsum('ik,ij->jk', xs, grads)/len(xs)
 
 def np_new_cov(xs):
-    return np.dot((xs - np.mean(xs, axis=0)).T, xs  - np.mean(xs, axis=0))/len(xs)
+    return jnp.dot((xs - np.mean(xs, axis=0)).T, xs  - np.mean(xs, axis=0))/len(xs)
 
-def new_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, estimated_gradient=False):
+def new_beta_second_shift_estimator(F, x_0, alpha, N, jrandom_key):
     # Note, i could not invert the cov at the end to save inversion of the Hessian.
-    sample_points = hit_run(x_0, F, x_0.shape[0], N, alpha)   
+    sample_points = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, jrandom_key)   
     out_grads = F.f1(sample_points)
     second_shift_est = new_proper_cov(sample_points, out_grads)
-    return second_shift_est.dot(np.linalg.inv(np_new_cov(sample_points)))
+    return second_shift_est.dot(jnp.linalg.inv(np_new_cov(sample_points)))
 
 
-def multi_second_shift_estimator_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid, seed=0):
+def multi_second_shift_estimator_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid, jrandom_key):
     set_seed(seed)
     # Notice, we should be sharing the radius. Lock is needed to synchronise 
     sample_points = hit_run(x_0, F, x_0.shape[0], process_N, alpha)

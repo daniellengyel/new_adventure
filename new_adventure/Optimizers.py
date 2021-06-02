@@ -1,9 +1,12 @@
 import numpy as np
+import jax.numpy as jnp
+from jax import random as jrandom
+import jax
 import time
 import pickle
-from .Functions import LinearCombination, ShiftEstimation, BetaShiftEstimation
-from .utils import get_barrier
-from .derivative_free_estimation import BFGS_update
+from .Functions import LinearCombination, BetaShiftEstimation
+from .utils import get_barrier, get_potential
+from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator
 import multiprocessing
 
 def get_optimizer(config):
@@ -29,34 +32,46 @@ class Newton:
         f1 = F.f1(X)
         return X - np.array([H_inv[i].dot(f1[i]) for i in range(len(f1))]), False
 
+
+def helper_Newton_shift_est_IPM(obj, barrier, estimator):
+    def helper(X, jrandom_key, t):
+        num_samples = 5000
+        alpha=200
+        combined_F = LinearCombination(obj, barrier, [1, t])
+        return estimator(combined_F, X, alpha, num_samples, jrandom_key)
+    return helper
+
+
 class Newton_shift_est_IPM:
     def __init__(self, config):
         self.config = config
-        self.num_processes = config["num_processes"]
         self.barrier = get_barrier(config)
+        self.F = get_potential(config)
         self.c1 = config["optimization_meta"]["c1"]
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
-        self.beta_estimation = BetaShiftEstimation(None, 100, num_processes=self.num_processes)
+        self.jrandom_key = jrandom.PRNGKey(config["optimization_meta"]["jrandom_key"])
+        self.jited_estimator = jax.jit(helper_Newton_shift_est_IPM(self.F, self.barrier, new_beta_second_shift_estimator))
 
 
     def update(self, X, F, time_step, full_path=True):
         t = 4 * (0.75)**(time_step) # (1.5)**(time_step)
-        combined_F_pre = LinearCombination(F, self.barrier, [1, t])
-        self.beta_estimation.F = combined_F_pre
-        combined_F = self.beta_estimation
+        combined_F = LinearCombination(F, self.barrier, [1, t])
 
         if full_path:
             full_path_arr = [(X.copy(), time.time())]
         
         while True:
-            a_time = time.time()
-            H_inv = combined_F.f2_inv(X)
-            print(time.time() - a_time)
+            # Get hess inverse
+            key, subkey = jrandom.split(self.jrandom_key)
+
+            temp_res = self.jited_estimator(X[0], subkey, t)
+            H_inv = jnp.linalg.inv(temp_res)
+            self.jrandom_key = key
             
             f1 = combined_F.f1(X)
 
-            search_direction = -H_inv[0].dot(f1[0])
+            search_direction = -H_inv.dot(f1[0])
             newton_decrement_squared = -f1[0].dot(search_direction)
             print(newton_decrement_squared)
             print(F.f(X))
@@ -104,6 +119,7 @@ class Newton_IPM:
             f1 = combined_F.f1(X)
 
             search_direction = -H_inv[0].dot(f1[0])
+            print(-f1[0].dot(search_direction))
             newton_decrement = np.sqrt(-f1[0].dot(search_direction))
             print(newton_decrement**2)
             print(self.barrier.f(X))
@@ -113,7 +129,7 @@ class Newton_IPM:
             if newton_decrement**2 < self.delta:
                 break
 
-            alpha = linesearch(combined_F, X[0], 1/(1 + newton_decrement) * search_direction, self.c1, self.c2) # 1/(1 + newton_decrement) #
+            alpha = 1/(1 + newton_decrement) # linesearch(combined_F, X[0], 1/(1 + newton_decrement) * search_direction, self.c1, self.c2) # 1/(1 + newton_decrement) #
             X[0] = X[0] + alpha * search_direction
             if full_path:
                 full_path_arr.append((X.copy(), time.time()))
@@ -132,12 +148,10 @@ class BFGS:
         self.delta = config["optimization_meta"]["delta"]
         self.num_iter = 0
 
-    def update(self, X, F, time_step, full_path=True, with_shift=True):
+    def update(self, X, F, time_step, full_path=True):
         assert len(X) == 1
         t = 4 * (0.75)**(time_step) # (1.5)**(time_step)
         combined_F = LinearCombination(F, self.barrier, [1, t])
-
-        beta_combined_F = BetaShiftEstimation(combined_F, 100)
 
         if time_step == 0:
             self.H_inv = np.eye(self.config["domain_dim"]) #np.linalg.inv(combined_F.f2(X)[0])
@@ -147,16 +161,14 @@ class BFGS:
         
         while True:
         # for _ in range(50):
-            if with_shift and ((self.num_iter + 1) % 50) == 0:
-                self.H_inv = beta_combined_F.f2_inv(X)[0]
+        
 
             f1 = combined_F.f1(X)
 
             search_direction = -self.H_inv.dot(f1[0])
             newton_decrement_squared = -f1[0].dot(search_direction)
 
-            if with_shift and newton_decrement_squared < 0:
-                self.H_inv = beta_combined_F.f2_inv(X, 6000)[0]
+            if newton_decrement_squared < 0:
                 if full_path:
                     full_path_arr.append((X.copy(), time.time()))
                 continue

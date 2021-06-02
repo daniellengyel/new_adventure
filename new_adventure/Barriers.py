@@ -2,6 +2,8 @@
 
 import numpy as np
 import time
+import jax.numpy as jnp
+import jax
 
 class LogPolytopeBarrier:
 
@@ -35,6 +37,7 @@ class LogPolytopeBarrier:
         dists, signs = self._get_dists(xs) 
         ret = -np.sum(np.log(dists), axis=1) # shape = (N_x)
         ret[np.any(signs > 0, axis=1)] = np.inf 
+        # jax.ops.index_update(ret, np.any(signs > 0, axis=1), np.inf)
         return ret
     
     def f1(self, xs):
