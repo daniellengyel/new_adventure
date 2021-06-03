@@ -51,7 +51,8 @@ class Newton_shift_est_IPM:
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
         self.jrandom_key = jrandom.PRNGKey(config["optimization_meta"]["jrandom_key"])
-        self.jited_estimator = jax.jit(helper_Newton_shift_est_IPM(self.F, self.barrier, new_beta_second_shift_estimator))
+        # self.jited_estimator = jax.jit(helper_Newton_shift_est_IPM(self.F, self.barrier, new_beta_second_shift_estimator))
+        self.jited_estimator = helper_Newton_shift_est_IPM(self.F, self.barrier, new_beta_second_shift_estimator)
 
 
     def update(self, X, F, time_step, full_path=True):

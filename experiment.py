@@ -10,6 +10,10 @@ import psutil
 
 import new_adventure as new_adv
 
+# again, this only works on startup!
+from jax.config import config
+config.update("jax_enable_x64", True)
+
 # Job specific 
 try:
     ARRAY_INDEX = int(os.environ["PBS_ARRAY_INDEX"]) - 1
@@ -53,7 +57,7 @@ config["potential_name"] = "linear"
 config["potential_meta"] = {"c": np.ones(dim)} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
 
 # optimization
-config["optimization_name"] = "Newton_IPM"
+config["optimization_name"] = "Newton_shift_est_IPM"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
 # elif ARRAY_INDEX == 1:
