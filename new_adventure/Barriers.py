@@ -36,7 +36,7 @@ class LogPolytopeBarrier:
         """x.shape = (N, d). Outside of the bounded region around zero we are infinite."""
         dists, signs = self._get_dists(xs) 
         ret = -jnp.sum(jnp.log(dists), axis=1) # shape = (N_x)
-        ret = jax.ops.index_update(ret, jnp.any(signs > 0, axis=1), jnp.inf)
+        ret = jnp.where(jnp.any(signs > 0, axis=1), jnp.inf, ret) # jax.ops.index_update(ret, jnp.any(signs > 0, axis=1), jnp.inf)
         return ret
     
     def f1(self, xs):

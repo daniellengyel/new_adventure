@@ -57,7 +57,7 @@ config["potential_name"] = "linear"
 config["potential_meta"] = {"c": np.ones(dim)} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
 
 # optimization
-config["optimization_name"] = "Newton_shift_est_IPM"
+config["optimization_name"] = "BFGS"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
 # elif ARRAY_INDEX == 1:
