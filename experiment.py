@@ -22,10 +22,10 @@ except:
 
 def experiment_run(config_inp, path):
     # setup saveing and save config
-    file_stamp = str(time.time())
-    exp_folder = os.path.join(path, file_stamp)
-    os.mkdir(exp_folder)
-    new_adv.save_load.save_config(path, file_stamp, config_inp)
+    # file_stamp = str(time.time())
+    # exp_folder = os.path.join(path, file_stamp)
+    # os.mkdir(exp_folder)
+    # new_adv.save_load.save_config(path, file_stamp, config_inp)
 
     # get opt and save
     a = time.time()
@@ -57,7 +57,7 @@ config["potential_name"] = "linear"
 config["potential_meta"] = {"c": np.ones(dim)} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
 
 # optimization
-config["optimization_name"] = "BFGS"
+config["optimization_name"] = "Newton_shift_est_IPM"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
 # elif ARRAY_INDEX == 1:

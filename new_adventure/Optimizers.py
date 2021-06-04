@@ -44,7 +44,7 @@ class Newton_shift_est_IPM:
         self.delta = config["optimization_meta"]["delta"]
         self.jrandom_key = jrandom.PRNGKey(config["optimization_meta"]["jrandom_key"])
         self.jited_estimator = jax.jit(helper_Newton_shift_est_IPM(self.obj, self.barrier, new_beta_second_shift_estimator))
-        self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier))
+        self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
 
 
     def update(self, X, F, time_step, full_path=True):
@@ -76,7 +76,7 @@ class Newton_shift_est_IPM:
             newton_decrement = np.sqrt(np.abs(newton_decrement_squared))
 
             # Check if completed
-            alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, self.c1, self.c2, t)
+            alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
             if alpha is None:
                 break
             X[0] = X[0] + 1/(1 + newton_decrement) * alpha * search_direction
@@ -122,7 +122,7 @@ class Newton_IPM:
             if newton_decrement**2 < self.delta:
                 break
 
-            alpha = 1/(1 + newton_decrement) # linesearch(combined_F, X[0], 1/(1 + newton_decrement) * search_direction, self.c1, self.c2) # 1/(1 + newton_decrement) #
+            alpha = 1/(1 + newton_decrement) 
             X[0] = X[0] + alpha * search_direction
             if full_path:
                 full_path_arr.append((X.copy(), time.time()))
@@ -141,7 +141,8 @@ class BFGS:
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
         self.num_iter = 0
-        self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier))
+        self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
+
 
     def update(self, X, F, time_step, full_path=True):
         assert len(X) == 1
@@ -175,8 +176,8 @@ class BFGS:
             if newton_decrement**2 < self.delta:
                 break
 
-            alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, self.c1, self.c2, t)
-            
+            alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
+            print(alpha)
             print(F.f(X))
 
             if alpha is None:
@@ -196,101 +197,74 @@ class BFGS:
             return full_path_arr
         return X
 
-# class ISMD:
-#     # For now no direct mirror map
-#     def __init__(self, meta=None):
-#         self.gamma = meta["gamma"]
-#         self.sigma = meta["sigma"]
-    
-#     def update(self, X, F, time_step=None):
-#         interaction = 1/float(len(X)) * np.array([np.sum(X - X[i], axis=0) for i in range(len(X))])
-#         noise = np.random.rand(*X.shape)
-#         return X - self.gamma * F.f1(X) +  self.gamma * interaction + self.sigma * np.sqrt(self.gamma) * noise
- 
-# class OLD:
-#     # For now no direct mirror map
-#     def __init__(self, meta=None):
-#         self.gamma = meta["gamma"]
-#         self.sigma = meta["sigma"]
-    
-#     def update(self, X, F, time_step=None):
-#         noise = np.random.rand(*X.shape)
-#         return X - self.gamma * F.f1(X) + self.sigma * np.sqrt(self.gamma) * noise
+def helper_linesearch(obj, barrier, c1, c2):
 
-# class ISMD:
-#     # For now no direct mirror map
-#     def __init__(self, meta=None):
-#         self.gamma = meta["gamma"]
-#         self.sigma = meta["sigma"]
-    
-#     def update(self, X, F, time_step=None):
-#         interaction = 1/float(len(X)) * np.array([np.sum(X - X[i], axis=0) for i in range(len(X))])
-#         noise = np.random.rand(*X.shape)
-#         return X - self.gamma * F.f1(X) +  self.gamma * interaction + self.sigma * np.sqrt(self.gamma) * noise
-
-def helper_linesearch(obj, barrier):
-    def helper(x_0, search_direction, c1, c2, t):
+    def helper(x_0, search_direction, t):
         combined_F = LinearCombination(obj, barrier, [1, t])
         f0 = combined_F.f(x_0.reshape(1, -1))[0]
         f1 = combined_F.f1(x_0.reshape(1, -1))[0]
         dg = jnp.inner(search_direction, f1)
 
         def armijo_rule(alpha):
-            return not combined_F.f((x_0 + alpha * search_direction).reshape(1, -1))[0] <= f0 + c1*alpha*dg
+            return combined_F.f((x_0 + alpha * search_direction).reshape(1, -1))[0] > f0 + c1*alpha*dg
         
         def armijo_update(alpha):
             return c2*alpha
-        
-        return lax.while_loop(armijo_rule, armijo_update, 1)
+        alpha = 1
+        # while armijo_rule(alpha):
+        #     alpha = armijo_update(alpha)
+        #     # print(alpha)
+        alpha = lax.while_loop(armijo_rule, armijo_update, 1)
+        return alpha
 
     return helper
 
-def armijo_rule(alpha):
+# def armijo_rule(alpha):
     
-    f0 = F.f(x_0.reshape(1, -1))[0]
-    f1 = F.f1(x_0.reshape(1, -1))[0]
-    dg = jnp.inner(search_direction, f1)
+#     f0 = F.f(x_0.reshape(1, -1))[0]
+#     f1 = F.f1(x_0.reshape(1, -1))[0]
+#     dg = jnp.inner(search_direction, f1)
     
-    counter = 0
-    while True:
-        # Check armijo rule 
-        if F.f((x_0 + alpha * search_direction).reshape(1, -1))[0] <= f0 + c1*alpha*dg:
-            return alpha
-            # check curvature condition
-            if -np.inner(search_direction, F.f1((x_0 + alpha * search_direction).reshape(1, -1))[0]) <= -c2 * dg:
-                return alpha
+#     counter = 0
+#     while True:
+#         # Check armijo rule 
+#         if F.f((x_0 + alpha * search_direction).reshape(1, -1))[0] <= f0 + c1*alpha*dg:
+#             return alpha
+#             # check curvature condition
+#             if -np.inner(search_direction, F.f1((x_0 + alpha * search_direction).reshape(1, -1))[0]) <= -c2 * dg:
+#                 return alpha
         
-        alpha = c2*alpha
+#         alpha = c2*alpha
         
-        counter += 1
-        if counter > 1000:
-            return None
-            raise Exception("Too many linesearch iterations. ")
+#         counter += 1
+#         if counter > 1000:
+#             return None
+#             raise Exception("Too many linesearch iterations. ")
 
 
-def linesearch(F, x_0, search_direction, c1, c2):
-    """x0.shape = (dim)"""
-    alpha = 1
+# def linesearch(F, x_0, search_direction, c1, c2):
+#     """x0.shape = (dim)"""
+#     alpha = 1
     
-    f0 = F.f(x_0.reshape(1, -1))[0]
-    f1 = F.f1(x_0.reshape(1, -1))[0]
-    dg = jnp.inner(search_direction, f1)
+#     f0 = F.f(x_0.reshape(1, -1))[0]
+#     f1 = F.f1(x_0.reshape(1, -1))[0]
+#     dg = jnp.inner(search_direction, f1)
     
-    counter = 0
-    while True:
-        # Check armijo rule 
-        if F.f((x_0 + alpha * search_direction).reshape(1, -1))[0] <= f0 + c1*alpha*dg:
-            return alpha
-            # check curvature condition
-            if -np.inner(search_direction, F.f1((x_0 + alpha * search_direction).reshape(1, -1))[0]) <= -c2 * dg:
-                return alpha
+#     counter = 0
+#     while True:
+#         # Check armijo rule 
+#         if F.f((x_0 + alpha * search_direction).reshape(1, -1))[0] <= f0 + c1*alpha*dg:
+#             return alpha
+#             # check curvature condition
+#             if -np.inner(search_direction, F.f1((x_0 + alpha * search_direction).reshape(1, -1))[0]) <= -c2 * dg:
+#                 return alpha
         
-        alpha = c2*alpha
+#         alpha = c2*alpha
         
-        counter += 1
-        if counter > 1000:
-            return None
-            raise Exception("Too many linesearch iterations. ")
+#         counter += 1
+#         if counter > 1000:
+#             return None
+#             raise Exception("Too many linesearch iterations. ")
 
 def helper_Newton_shift_est_IPM(obj, barrier, estimator):
     def helper(X, jrandom_key, t):
