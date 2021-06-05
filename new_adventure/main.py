@@ -1,4 +1,4 @@
-import autograd.numpy as np
+import numpy as np
 
 from .utils import *
 from .Functions import *
@@ -12,8 +12,6 @@ import time
 
 
 def optimize(config, verbose=False):
-    if config["seed"] is not None:
-        np.random.seed(config["seed"])
 
     # init num_particles
     all_paths = []
@@ -23,24 +21,23 @@ def optimize(config, verbose=False):
 
     num_steps = config["num_steps"]
 
-    # get potential function
-    F = get_potential(config)
-
     # get optimization method
-    opt = get_optimizer(config)
+    opt = get_optimizer(config) # gets the barrier and objective function
 
     # TODO init saving
     # file_stamp = str(time.time())  # get_file_stamp()
     # writer = SummaryWriter("{}/runs/{}".format(folder_path, file_stamp))
 
+    if config["seed"] is not None:
+        np.random.seed(config["seed"])
     
 
     for t in range(num_steps):
         print(t)
 
-        full_update_path = opt.update(p_curr, F, t)
+        full_update_path = opt.update(p_curr, t)
         all_paths.append(full_update_path)
-        p_curr = full_update_path[-1][0]
+        p_curr = full_update_path[-1][0].copy()
 
         # if (t % 50) == 0 and verbose:
         #     print("Iteration", t)

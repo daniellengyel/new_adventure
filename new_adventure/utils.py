@@ -1,6 +1,7 @@
 from .Functions import Quadratic, Ackley, Linear
 from .Barriers import LogPolytopeBarrier
 import numpy as np
+import jax.numpy as jnp
 import random
 
 def get_potential(config):
@@ -13,7 +14,10 @@ def get_potential(config):
     if config["potential_name"] == "linear":
         potential_meta = config["potential_meta"]
         # Set Linear Objective
-        c = potential_meta["c"]
+        if potential_meta["direction_name"] == "ones":
+            c = np.ones(config["domain_dim"])
+        else:
+            raise ValueError("Does not support given function {} with direction {}.".format(config["potential_name"], potential_meta["direction_name"]))
         F = Linear(c)
         # if potential_meta["estimation_type"] == "shift_estimator":
         #     F = ShiftEstimation(F, 0.1, np.eye(len(c)), 1000)
@@ -26,7 +30,13 @@ def get_potential(config):
 def get_barrier(config):
     if (config["optimization_meta"]["barrier_type"] == "log") and (config["domain_name"] == "Polytope"):
         domain_meta = config["domain_meta"]
-        B = LogPolytopeBarrier(domain_meta["ws"], domain_meta["bs"])
+        np.random.seed(domain_meta["seed"])
+        num_barriers = domain_meta["num_barriers"]
+        dim = config["domain_dim"]
+        dirs = np.random.normal(size=(num_barriers, dim)) # sample gaussian and normalize 
+        ws = dirs/np.linalg.norm(dirs, axis=1).reshape(-1, 1)
+        bs = np.ones(num_barriers)
+        B = LogPolytopeBarrier(ws, bs)
     else: 
         raise ValueError("Does not support given barrier type {} with domain {}".format(config["optimization_meta"]["barrier_type"], config["domain_name"]))
     return B
@@ -34,24 +44,24 @@ def get_barrier(config):
 def get_particles(config):
     # get start_pos
     # TODO fix dimension
-    if config["particle_init"] == "uniform":
-        num_particles = config["num_particles"]
-        particles = [[np.random.uniform(config["x_range"][0], config["x_range"][1])] for _ in range(num_particles)]
-    elif config["particle_init"] == "2d_uniform": # for now same range for all dimensions
-        num_particles = config["num_particles"]
-        x_low, x_high = config["x_range"]
-        particles = [[np.random.uniform(x_low, x_high), np.random.uniform(x_low, x_high)] for _ in range(num_particles)]
-    elif config["particle_init"] == "2d_position": # for now same range for all dimensions
-        num_particles = config["num_particles"]
-        x_low, x_high = config["x_range"]
-        p = np.array(config["particle_init"]["params"]["position"])
-        assert ((x_low <= p) & (p <= x_high)).all()
-        particles = [p for _ in range(num_particles)]
-    elif config["particle_init"] == "origin":
+    # if config["particle_init"] == "uniform":
+    #     num_particles = config["num_particles"]
+    #     particles = [[np.random.uniform(config["x_range"][0], config["x_range"][1])] for _ in range(num_particles)]
+    # elif config["particle_init"] == "2d_uniform": # for now same range for all dimensions
+    #     num_particles = config["num_particles"]
+    #     x_low, x_high = config["x_range"]
+    #     particles = [[np.random.uniform(x_low, x_high), np.random.uniform(x_low, x_high)] for _ in range(num_particles)]
+    # elif config["particle_init"] == "2d_position": # for now same range for all dimensions
+    #     num_particles = config["num_particles"]
+    #     x_low, x_high = config["x_range"]
+    #     p = np.array(config["particle_init"]["params"]["position"])
+    #     assert ((x_low <= p) & (p <= x_high)).all()
+    #     particles = [p for _ in range(num_particles)]
+    if config["particle_init"] == "origin":
         num_particles = config["num_particles"]
         particles = [np.zeros(config["domain_dim"]) for _ in range(num_particles)]
     else:
-        raise ValueError("Does not support given function {}".format(config["particle_init"]))
+        raise ValueError("Does not support given function {}.".format(config["particle_init"]))
     return np.array(particles)
 
 def get_config_to_id_map(configs):

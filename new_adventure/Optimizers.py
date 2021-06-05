@@ -11,27 +11,12 @@ from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estim
 import multiprocessing
 
 def get_optimizer(config):
-    if "Newton" == config["optimization_name"]:
-        return Newton()
-    elif "ISMD" == config["optimization_name"]:
-        return ISMD(config["optimization_meta"])
-    elif "OLD" == config["optimization_name"]:
-        return OLD(config["optimization_meta"])
-    elif "Newton_IPM" == config["optimization_name"]:
+    if "Newton_IPM" == config["optimization_name"]:
         return Newton_IPM(config)
     elif "Newton_shift_est_IPM" == config["optimization_name"]:
         return Newton_shift_est_IPM(config)
     elif "BFGS" == config["optimization_name"]:
         return BFGS(config)
-
-class Newton:
-    def __init__(self, config=None):
-        pass
-
-    def update(self, X, F, time_step=None):
-        H_inv = F.f2_inv(X)
-        f1 = F.f1(X)
-        return X - np.array([H_inv[i].dot(f1[i]) for i in range(len(f1))]), False
 
 
 class Newton_shift_est_IPM:
@@ -47,9 +32,9 @@ class Newton_shift_est_IPM:
         self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
 
 
-    def update(self, X, F, time_step, full_path=True):
+    def update(self, X, time_step, full_path=True):
         t = 4 * (0.75)**(time_step) # (1.5)**(time_step)
-        combined_F = LinearCombination(F, self.barrier, [1, t])
+        combined_F = LinearCombination(self.obj, self.barrier, [1, t])
 
         if full_path:
             full_path_arr = [(X.copy(), time.time())]
@@ -57,8 +42,9 @@ class Newton_shift_est_IPM:
         while True:
             # Get hess inverse
             key, subkey = jrandom.split(self.jrandom_key)
-
+            start_time = time.time()
             temp_res = self.jited_estimator(X[0], subkey, t)
+            # print(time.time() - start_time)
             H_inv = jnp.linalg.inv(temp_res)
             self.jrandom_key = key
             
@@ -66,8 +52,8 @@ class Newton_shift_est_IPM:
 
             search_direction = -H_inv.dot(f1[0])
             newton_decrement_squared = -f1[0].dot(search_direction)
-            print(newton_decrement_squared)
-            print(F.f(X))
+            # print(newton_decrement_squared)
+            # print(F.f(X))
 
             if newton_decrement_squared < 0:
                 if full_path:
@@ -76,7 +62,9 @@ class Newton_shift_est_IPM:
             newton_decrement = np.sqrt(np.abs(newton_decrement_squared))
 
             # Check if completed
+            start_time = time.time()
             alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
+            # print(time.time() - start_time)
             if alpha is None:
                 break
             X[0] = X[0] + 1/(1 + newton_decrement) * alpha * search_direction
@@ -96,13 +84,16 @@ class Newton_IPM:
     def __init__(self, config):
         self.config = config
         self.barrier = get_barrier(config)
+        self.obj = get_potential(config)
         self.c1 = config["optimization_meta"]["c1"]
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
+        self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
 
-    def update(self, X, F, time_step, full_path=True):
+
+    def update(self, X, time_step, full_path=True):
         t = 4 * (0.5)**(time_step) # (1.5)**(time_step)
-        combined_F = LinearCombination(F, self.barrier, [1, t])
+        combined_F = LinearCombination(self.obj, self.barrier, [1, t])
         
         if full_path:
             full_path_arr = [(X.copy(), time.time())]
@@ -112,18 +103,14 @@ class Newton_IPM:
             f1 = combined_F.f1(X)
 
             search_direction = -H_inv[0].dot(f1[0])
-            print(-f1[0].dot(search_direction))
             newton_decrement = np.sqrt(-f1[0].dot(search_direction))
-            print(newton_decrement**2)
-            print(self.barrier.f(X))
-            print(F.f(X))
 
             # Check if completed
             if newton_decrement**2 < self.delta:
                 break
 
-            alpha = 1/(1 + newton_decrement) 
-            X[0] = X[0] + alpha * search_direction
+            alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t) #1/(1 + newton_decrement) 
+            X[0] = X[0] + 1/(1 + newton_decrement) * alpha * search_direction
             if full_path:
                 full_path_arr.append((X.copy(), time.time()))
 
@@ -144,10 +131,10 @@ class BFGS:
         self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
 
 
-    def update(self, X, F, time_step, full_path=True):
+    def update(self, X, time_step, full_path=True):
         assert len(X) == 1
         t = 4 * (0.75)**(time_step) # (1.5)**(time_step)
-        combined_F = LinearCombination(F, self.barrier, [1, t])
+        combined_F = LinearCombination(self.obj, self.barrier, [1, t])
 
         if time_step == 0:
             self.H_inv = np.eye(self.config["domain_dim"]) #np.linalg.inv(combined_F.f2(X)[0])
@@ -155,9 +142,7 @@ class BFGS:
         if full_path:
             full_path_arr = [(X.copy(), time.time())]
         
-        while True:
-        # for _ in range(50):
-        
+        while True:        
 
             f1 = combined_F.f1(X)
 
@@ -170,15 +155,12 @@ class BFGS:
                 continue
             
             newton_decrement = np.sqrt(newton_decrement_squared)
-            print(newton_decrement)
 
             # Check if completed
             if newton_decrement**2 < self.delta:
                 break
 
             alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
-            print(alpha)
-            print(F.f(X))
 
             if alpha is None:
                 print("Alpha was none.")
@@ -219,56 +201,9 @@ def helper_linesearch(obj, barrier, c1, c2):
 
     return helper
 
-# def armijo_rule(alpha):
-    
-#     f0 = F.f(x_0.reshape(1, -1))[0]
-#     f1 = F.f1(x_0.reshape(1, -1))[0]
-#     dg = jnp.inner(search_direction, f1)
-    
-#     counter = 0
-#     while True:
-#         # Check armijo rule 
-#         if F.f((x_0 + alpha * search_direction).reshape(1, -1))[0] <= f0 + c1*alpha*dg:
-#             return alpha
-#             # check curvature condition
-#             if -np.inner(search_direction, F.f1((x_0 + alpha * search_direction).reshape(1, -1))[0]) <= -c2 * dg:
-#                 return alpha
-        
-#         alpha = c2*alpha
-        
-#         counter += 1
-#         if counter > 1000:
-#             return None
-#             raise Exception("Too many linesearch iterations. ")
-
-
-# def linesearch(F, x_0, search_direction, c1, c2):
-#     """x0.shape = (dim)"""
-#     alpha = 1
-    
-#     f0 = F.f(x_0.reshape(1, -1))[0]
-#     f1 = F.f1(x_0.reshape(1, -1))[0]
-#     dg = jnp.inner(search_direction, f1)
-    
-#     counter = 0
-#     while True:
-#         # Check armijo rule 
-#         if F.f((x_0 + alpha * search_direction).reshape(1, -1))[0] <= f0 + c1*alpha*dg:
-#             return alpha
-#             # check curvature condition
-#             if -np.inner(search_direction, F.f1((x_0 + alpha * search_direction).reshape(1, -1))[0]) <= -c2 * dg:
-#                 return alpha
-        
-#         alpha = c2*alpha
-        
-#         counter += 1
-#         if counter > 1000:
-#             return None
-#             raise Exception("Too many linesearch iterations. ")
-
 def helper_Newton_shift_est_IPM(obj, barrier, estimator):
     def helper(X, jrandom_key, t):
-        num_samples = 5000
+        num_samples = 3000
         alpha=200
         combined_F = LinearCombination(obj, barrier, [1, t])
         return estimator(combined_F, X, alpha, num_samples, jrandom_key)

@@ -12,5 +12,4 @@ new_adventure/utils.py
 new_adventure.egg-info/PKG-INFO
 new_adventure.egg-info/SOURCES.txt
 new_adventure.egg-info/dependency_links.txt
-new_adventure.egg-info/requires.txt
 new_adventure.egg-info/top_level.txt

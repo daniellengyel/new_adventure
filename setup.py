@@ -16,13 +16,6 @@ setup(
     ],
     python_requires=">=3.6",
     install_requires=[
-        "pyyaml",
-        # "ray[tune]",
-        "numpy",
-        "matplotlib",
-        "pandas",
-        "tqdm",
-        "seaborn",
-        "autograd"
+
     ],
 )
