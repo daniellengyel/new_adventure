@@ -45,7 +45,6 @@ class LogPolytopeBarrier:
         return grads
 
     def f2(self, xs):
-        a = time.time()
         normalized_ws = self.ws / jnp.linalg.norm(self.ws, axis=1).reshape(-1, 1)
         dists, signs = self._get_dists(xs)
         hess = []

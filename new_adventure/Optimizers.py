@@ -44,7 +44,6 @@ class Newton_shift_est_IPM:
             key, subkey = jrandom.split(self.jrandom_key)
             start_time = time.time()
             temp_res = self.jited_estimator(X[0], subkey, t)
-            # print(time.time() - start_time)
             H_inv = jnp.linalg.inv(temp_res)
             self.jrandom_key = key
             
@@ -52,8 +51,6 @@ class Newton_shift_est_IPM:
 
             search_direction = -H_inv.dot(f1[0])
             newton_decrement_squared = -f1[0].dot(search_direction)
-            # print(newton_decrement_squared)
-            # print(F.f(X))
 
             if newton_decrement_squared < 0:
                 if full_path:
@@ -104,7 +101,7 @@ class Newton_IPM:
 
             search_direction = -H_inv[0].dot(f1[0])
             newton_decrement = np.sqrt(-f1[0].dot(search_direction))
-
+            
             # Check if completed
             if newton_decrement**2 < self.delta:
                 break

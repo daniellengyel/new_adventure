@@ -19,8 +19,6 @@ def get_potential(config):
         else:
             raise ValueError("Does not support given function {} with direction {}.".format(config["potential_name"], potential_meta["direction_name"]))
         F = Linear(c)
-        # if potential_meta["estimation_type"] == "shift_estimator":
-        #     F = ShiftEstimation(F, 0.1, np.eye(len(c)), 1000)
     elif config["potential_name"] == "Ackley":
         F = Ackley()
     else:
