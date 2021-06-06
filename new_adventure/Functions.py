@@ -10,43 +10,7 @@ import multiprocessing
 
 # output of f2 is of shape (N, d, d)
 
-class Linear:
-    def __init__(self, c):
-        """c.shape = (d)"""
-        self.c = c
 
-    def f(self, X):
-        return X.dot(self.c) #/ float(len(self.c))
-
-    def f1(self, X):
-        return np.tile(self.c, (X.shape[0], 1)) #/ float(len(self.c))
-
-    def f2(self, X):
-        return np.tile(np.array([0]), (X.shape[0], X.shape[1], X.shape[1]))  #/ float(len(self.c))
-
-class BetaShiftEstimation():
-    def __init__(self, F, N):
-        self.F = F
-        self.N = N
-
-    def f(self, x):
-        return self.F.f(x)
-
-    def f1(self, x):
-        num_runs = 1500
-        alpha=1000
-        return self.F.f1(x) 
-
-    def f2(self, x, num_samples=None, jrandom_key=None):
-        if num_samples is None:
-            num_samples = 5000
-        alpha=1000
-        res = np.array([new_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, jrandom_key=jrandom_key) for x_i in x])
-
-
-    def f2_inv(self, x, num_samples = None, jrandom_key=None):
-        f2 = self.f2(x, num_samples, jrandom_key)
-        return np.array([np.linalg.inv(f2[i]) for i in range(len(f2))])
        
 
    
@@ -174,3 +138,41 @@ class LinearCombination():
 
     def dir_dists(self, xs, dirs):
         return self.barrier.dir_dists(xs, dirs)
+
+class Linear:
+    def __init__(self, c):
+        """c.shape = (d)"""
+        self.c = c
+
+    def f(self, X):
+        return X.dot(self.c) #/ float(len(self.c))
+
+    def f1(self, X):
+        return np.tile(self.c, (X.shape[0], 1)) #/ float(len(self.c))
+
+    def f2(self, X):
+        return np.tile(np.array([0]), (X.shape[0], X.shape[1], X.shape[1]))  #/ float(len(self.c))
+
+class BetaShiftEstimation():
+    def __init__(self, F, N):
+        self.F = F
+        self.N = N
+
+    def f(self, x):
+        return self.F.f(x)
+
+    def f1(self, x):
+        num_runs = 1500
+        alpha=1000
+        return self.F.f1(x) 
+
+    def f2(self, x, num_samples=None, jrandom_key=None):
+        if num_samples is None:
+            num_samples = 5000
+        alpha=1000
+        res = np.array([new_beta_second_shift_estimator(self.F, x_i, alpha, num_samples, jrandom_key=jrandom_key) for x_i in x])
+
+
+    def f2_inv(self, x, num_samples = None, jrandom_key=None):
+        f2 = self.f2(x, num_samples, jrandom_key)
+        return np.array([np.linalg.inv(f2[i]) for i in range(len(f2))])

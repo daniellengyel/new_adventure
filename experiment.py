@@ -47,7 +47,7 @@ config["num_particles"] = 1
 # config["x_range"] = [-0.002, 0.002]
 
 config["domain_name"] = "Polytope"
-config["domain_meta"] = {"seed": 11, "num_barriers": dim * 2}
+config["domain_meta"] = {"seed": 10, "num_barriers": dim * 10}
 
 # function
 
@@ -78,7 +78,7 @@ config["optimization_meta"] = {"c1": 0.001, "c2": 0.7,
 
 config["seed"] = 0
 config["return_full_path"] = True
-config["num_steps"] = 15
+config["num_steps"] = 10
 
 # --- Set up folder in which to store all results ---
 folder_name = new_adv.save_load.get_file_stamp(config["optimization_name"])

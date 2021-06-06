@@ -29,7 +29,7 @@ class Newton_shift_est_IPM:
         self.delta = config["optimization_meta"]["delta"]
         self.jrandom_key = jrandom.PRNGKey(config["optimization_meta"]["jrandom_key"])
         self.jited_estimator = jax.jit(helper_Newton_shift_est_IPM(self.obj, self.barrier, new_beta_second_shift_estimator))
-        self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
+        self.jited_linesearch = helper_linesearch(self.obj, self.barrier, self.c1, self.c2)
 
 
     def update(self, X, time_step, full_path=True):
@@ -70,7 +70,7 @@ class Newton_shift_est_IPM:
                 
             if newton_decrement < self.delta:
                 break
-        # print(F.f(X))
+
         if full_path:
             return full_path_arr
         return X
@@ -85,7 +85,8 @@ class Newton_IPM:
         self.c1 = config["optimization_meta"]["c1"]
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
-        self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
+        # self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
+        self.jited_linesearch = helper_linesearch(self.obj, self.barrier, self.c1, self.c2)
 
 
     def update(self, X, time_step, full_path=True):
@@ -106,6 +107,9 @@ class Newton_IPM:
             if newton_decrement**2 < self.delta:
                 break
 
+            print(newton_decrement**2)
+            print(self.obj.f(X))
+
             alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t) #1/(1 + newton_decrement) 
             X[0] = X[0] + 1/(1 + newton_decrement) * alpha * search_direction
             if full_path:
@@ -125,7 +129,7 @@ class BFGS:
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
         self.num_iter = 0
-        self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
+        self.jited_linesearch = helper_linesearch(self.obj, self.barrier, self.c1, self.c2)
 
 
     def update(self, X, time_step, full_path=True):
@@ -190,10 +194,10 @@ def helper_linesearch(obj, barrier, c1, c2):
         def armijo_update(alpha):
             return c2*alpha
         alpha = 1
-        # while armijo_rule(alpha):
-        #     alpha = armijo_update(alpha)
+        while armijo_rule(alpha):
+            alpha = armijo_update(alpha)
         #     # print(alpha)
-        alpha = lax.while_loop(armijo_rule, armijo_update, 1)
+        # alpha = lax.while_loop(armijo_rule, armijo_update, 1)
         return alpha
 
     return helper
