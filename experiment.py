@@ -13,6 +13,7 @@ import new_adventure as new_adv
 # again, this only works on startup!
 from jax.config import config
 config.update("jax_enable_x64", True)
+# config.update('jax_disable_jit', True)
 
 # Job specific 
 try:
@@ -55,7 +56,7 @@ config["potential_name"] = "linear"
 config["potential_meta"] = {"direction_name": "ones"} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
 
 # optimization
-config["optimization_name"] = "Newton_IPM"
+config["optimization_name"] = "Newton_shift_est_IPM"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
 # elif ARRAY_INDEX == 1:
@@ -67,18 +68,11 @@ config["optimization_meta"] = {"c1": 0.001, "c2": 0.7,
 								"barrier_type": "log", "delta": 0.1, "jrandom_key": 0}
 
 
-
-
-# config["domain_meta"] = {"ws": np.array([[1, 0], [1, 0], [2, 1], [2, 1]]), "bs": [-0.1, 0.1, 0.3, -0.3]}
-# config["learning_rate"] = tune.grid_search(list(np.linspace(1, 40, 10)) + list(np.linspace(0.01, 1, 5)))
-# config["temperature"] =  tune.grid_search(list(np.linspace(0.01, 4, 5))) # 0.2
-
-
 # meta parameters (seed, how to save etc.)
 
 config["seed"] = 0
 config["return_full_path"] = True
-config["num_steps"] = 10
+config["num_steps"] = 25
 
 # --- Set up folder in which to store all results ---
 folder_name = new_adv.save_load.get_file_stamp(config["optimization_name"])

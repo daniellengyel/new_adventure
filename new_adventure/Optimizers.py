@@ -43,8 +43,9 @@ class Newton_shift_est_IPM:
             # Get hess inverse
             key, subkey = jrandom.split(self.jrandom_key)
             start_time = time.time()
-            temp_res = self.jited_estimator(X[0], subkey, t)
-            H_inv = jnp.linalg.inv(temp_res)
+            approx_H = self.jited_estimator(X[0], subkey, t)
+            print("Approx Hessian {}".format(time.time() - start_time))
+            H_inv = jnp.linalg.inv(approx_H)
             self.jrandom_key = key
             
             f1 = combined_F.f1(X)
@@ -61,7 +62,7 @@ class Newton_shift_est_IPM:
             # Check if completed
             start_time = time.time()
             alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
-            # print(time.time() - start_time)
+            print("line_search: {}".format(time.time() - start_time))
             if alpha is None:
                 break
             X[0] = X[0] + 1/(1 + newton_decrement) * alpha * search_direction
@@ -161,15 +162,19 @@ class BFGS:
             if newton_decrement**2 < self.delta:
                 break
 
+            start_time = time.time()
             alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
-
+            print("line_search: {}".format(time.time() - start_time))
             if alpha is None:
                 print("Alpha was none.")
                 break
 
             X_prev = X[0].copy()
             X[0] = X[0] + 1/(1 + newton_decrement) * alpha * search_direction
+            start_time = time.time()
+
             self.H_inv = BFGS_update(combined_F, X_prev, X[0], self.H_inv)
+            print("BFGS update {}".format(time.time() - start_time))
             
             if full_path:
                 full_path_arr.append((X.copy(), time.time()))
@@ -193,6 +198,7 @@ def helper_linesearch(obj, barrier, c1, c2):
         
         def armijo_update(alpha):
             return c2*alpha
+            
         alpha = 1
         while armijo_rule(alpha):
             alpha = armijo_update(alpha)
@@ -204,7 +210,7 @@ def helper_linesearch(obj, barrier, c1, c2):
 
 def helper_Newton_shift_est_IPM(obj, barrier, estimator):
     def helper(X, jrandom_key, t):
-        num_samples = 3000
+        num_samples = 5000
         alpha=200
         combined_F = LinearCombination(obj, barrier, [1, t])
         return estimator(combined_F, X, alpha, num_samples, jrandom_key)
