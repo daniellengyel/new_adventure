@@ -6,8 +6,8 @@ from jax import lax
 import time
 import pickle
 from .Functions import LinearCombination, BetaShiftEstimation
-from .utils import get_barrier, get_potential
-from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator
+from .utils import get_barrier, get_potential, woordbury_update
+from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator, multilevel_inv_estimator, get_neystrom_inv, multilevel_estimator_woodbury
 import multiprocessing
 
 def get_optimizer(config):
@@ -17,6 +17,10 @@ def get_optimizer(config):
         return Newton_shift_est_IPM(config)
     elif "BFGS" == config["optimization_name"]:
         return BFGS(config)
+    elif "Newton_multilevel_est_IPM" == config["optimization_name"]:
+        return Newton_multilevel_est_IPM(config)
+    elif "SIGMA" == config["optimization_name"]:
+        pass
 
 
 class Newton_shift_est_IPM:
@@ -27,6 +31,7 @@ class Newton_shift_est_IPM:
         self.c1 = config["optimization_meta"]["c1"]
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
+        self.with_neystrom = config["optimization_meta"]["with_neystrom"]
         self.jrandom_key = jrandom.PRNGKey(config["optimization_meta"]["jrandom_key"])
         self.jited_estimator = jax.jit(helper_Newton_shift_est_IPM(self.obj, self.barrier, new_beta_second_shift_estimator))
         self.jited_linesearch = helper_linesearch(self.obj, self.barrier, self.c1, self.c2)
@@ -41,28 +46,34 @@ class Newton_shift_est_IPM:
         
         while True:
             # Get hess inverse
-            key, subkey = jrandom.split(self.jrandom_key)
+            self.jrandom_key, subkey = jrandom.split(self.jrandom_key)
             start_time = time.time()
             approx_H = self.jited_estimator(X[0], subkey, t)
-            print("Approx Hessian {}".format(time.time() - start_time))
-            H_inv = jnp.linalg.inv(approx_H)
-            self.jrandom_key = key
+            # print("Approx Hessian {}".format(time.time() - start_time))
+            if not self.with_neystrom:
+                H_inv = jnp.linalg.inv(approx_H)
+            else:
+                self.jrandom_key, subkey = jrandom.split(self.jrandom_key)
+                H_inv = get_neystrom_inv(combined_F.f2(X)[0], 50, subkey)
             
             f1 = combined_F.f1(X)
 
             search_direction = -H_inv.dot(f1[0])
             newton_decrement_squared = -f1[0].dot(search_direction)
-
+            
             if newton_decrement_squared < 0:
                 if full_path:
                     full_path_arr.append((X.copy(), time.time()))
                 continue
             newton_decrement = np.sqrt(np.abs(newton_decrement_squared))
 
+            print(newton_decrement**2)
+            print(self.obj.f(X))
+
             # Check if completed
             start_time = time.time()
             alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
-            print("line_search: {}".format(time.time() - start_time))
+            # print("line_search: {}".format(time.time() - start_time))
             if alpha is None:
                 break
             X[0] = X[0] + 1/(1 + newton_decrement) * alpha * search_direction
@@ -76,7 +87,66 @@ class Newton_shift_est_IPM:
             return full_path_arr
         return X
 
-save_path = "/Users/daniellengyel/new_adventure/"
+class Newton_multilevel_est_IPM:
+    def __init__(self, config):
+        self.config = config
+        self.barrier = get_barrier(config)
+        self.obj = get_potential(config)
+        self.c1 = config["optimization_meta"]["c1"]
+        self.c2 = config["optimization_meta"]["c2"]
+        self.delta = config["optimization_meta"]["delta"]
+        self.jrandom_key = jrandom.PRNGKey(config["optimization_meta"]["jrandom_key"])
+        # self.jited_estimator = jax.jit(helper_Newton_multilevel_est_IPM(self.obj, self.barrier, multilevel_inv_estimator))
+        self.jited_estimator = helper_Newton_multilevel_inv_est_IPM(self.obj, self.barrier, multilevel_inv_estimator)
+        self.jited_linesearch = helper_linesearch(self.obj, self.barrier, self.c1, self.c2)
+        # self.H = jnp.eye(config["domain_dim"])
+
+
+    def update(self, X, time_step, full_path=True):
+        t = 4 * (0.75)**(time_step) # (1.5)**(time_step)
+        combined_F = LinearCombination(self.obj, self.barrier, [1, t])
+
+        if full_path:
+            full_path_arr = [(X.copy(), time.time())]
+        
+        while True:
+            # Get hess inverse
+            key, subkey = jrandom.split(self.jrandom_key)
+            start_time = time.time()
+            H_inv = self.jited_estimator(X[0], subkey, t, None)
+            # self.H = jnp.linalg.inv(H_inv)
+            # print("Approx Hessian {}".format(time.time() - start_time))
+            self.jrandom_key = key
+            
+            f1 = combined_F.f1(X)
+
+            search_direction = -H_inv.dot(f1[0])
+            newton_decrement_squared = -f1[0].dot(search_direction)
+            print(newton_decrement_squared)
+            print(self.obj.f(X))
+            if newton_decrement_squared < 0:
+                if full_path:
+                    full_path_arr.append((X.copy(), time.time()))
+                continue
+            newton_decrement = np.sqrt(np.abs(newton_decrement_squared))
+
+            # Check if completed
+            start_time = time.time()
+            alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
+            # print("line_search: {}".format(time.time() - start_time))
+            if alpha is None:
+                break
+            X[0] = X[0] + 1/(1 + newton_decrement) * alpha * search_direction
+            if full_path:
+                full_path_arr.append((X.copy(), time.time()))
+                
+            if newton_decrement < self.delta:
+                break
+
+        if full_path:
+            return full_path_arr
+        return X
+
 
 class Newton_IPM:
     def __init__(self, config):
@@ -86,9 +156,9 @@ class Newton_IPM:
         self.c1 = config["optimization_meta"]["c1"]
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
-        # self.jited_linesearch = jax.jit(helper_linesearch(self.obj, self.barrier, self.c1, self.c2))
+        self.with_neystrom = config["optimization_meta"]["with_neystrom"]
         self.jited_linesearch = helper_linesearch(self.obj, self.barrier, self.c1, self.c2)
-
+        self.jrandom_key = jrandom.PRNGKey(config["optimization_meta"]["jrandom_key"])
 
     def update(self, X, time_step, full_path=True):
         t = 4 * (0.5)**(time_step) # (1.5)**(time_step)
@@ -98,9 +168,13 @@ class Newton_IPM:
             full_path_arr = [(X.copy(), time.time())]
         
         while True:
-            H_inv = combined_F.f2_inv(X)
+            if not self.with_neystrom:
+                H_inv = combined_F.f2_inv(X)
+            else:
+                self.jrandom_key, subkey = jrandom.split(self.jrandom_key)
+                H_inv = jnp.array([get_neystrom_inv(combined_F.f2(X)[0], 50, subkey)])
+            
             f1 = combined_F.f1(X)
-
             search_direction = -H_inv[0].dot(f1[0])
             newton_decrement = np.sqrt(-f1[0].dot(search_direction))
             
@@ -157,14 +231,15 @@ class BFGS:
                 continue
             
             newton_decrement = np.sqrt(newton_decrement_squared)
-
+            print(newton_decrement**2)
+            print(self.obj.f(X))
             # Check if completed
             if newton_decrement**2 < self.delta:
                 break
 
             start_time = time.time()
             alpha = self.jited_linesearch(X[0], 1/(1 + newton_decrement) * search_direction, t)
-            print("line_search: {}".format(time.time() - start_time))
+            # print("line_search: {}".format(time.time() - start_time))
             if alpha is None:
                 print("Alpha was none.")
                 break
@@ -174,7 +249,7 @@ class BFGS:
             start_time = time.time()
 
             self.H_inv = BFGS_update(combined_F, X_prev, X[0], self.H_inv)
-            print("BFGS update {}".format(time.time() - start_time))
+            # print("BFGS update {}".format(time.time() - start_time))
             
             if full_path:
                 full_path_arr.append((X.copy(), time.time()))
@@ -215,6 +290,19 @@ def helper_Newton_shift_est_IPM(obj, barrier, estimator):
         combined_F = LinearCombination(obj, barrier, [1, t])
         return estimator(combined_F, X, alpha, num_samples, jrandom_key)
     return helper
+
+def helper_Newton_multilevel_inv_est_IPM(obj, barrier, estimator):
+    def helper(X, jrandom_key, t, prev_H):
+        num_samples = 5000
+        alpha=200
+        combined_F = LinearCombination(obj, barrier, [1, t])
+        d_prime = 75
+        new_H_inv = estimator(combined_F, X, alpha, num_samples, d_prime, jrandom_key)
+        # C_inv, W, V = estimator(combined_F, X, alpha, num_samples, d_prime, jrandom_key)
+        # new_H_inv = woordbury_update(jnp.linalg.inv(prev_H), C_inv, W, V)
+        return new_H_inv
+    return helper
+
 
 def check_completion(grad, update_direction, delta):
     return np.inner(grad, update_direction)**2 / 2. < delta

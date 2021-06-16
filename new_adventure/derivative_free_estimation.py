@@ -31,9 +31,9 @@ def jax_hit_run(x_0, barrier, dim, N, alpha, key):
     dists = barrier.dir_dists(x_0, dirs) # for each dir get distance to boundary
     radius = jnp.min(dists[0])
 
-    key, subkey = jrandom.split(key)
+    new_jrandom_key, subkey = jrandom.split(key)
     beta_p = (jrandom.beta(subkey, alpha, alpha, shape=(N, 1)) - 0.5) * 2 * radius 
-    return x_0 + dirs * beta_p
+    return x_0 + dirs * beta_p, new_jrandom_key
 
 
 def is_expectation(xs, weights):
@@ -49,49 +49,56 @@ def beta_first_shift_estimator(F, x_0, alpha, N, control_variate=True):
 
 def new_proper_cov(xs, grads):
     """xs.shape = [N, d], grads = [N, d]"""
-    return grads.T.dot(xs - np.mean(xs, axis=0))/len(xs) # np.einsum('ik,ij->jk', xs, grads)/len(xs)
+    return grads.T.dot(xs - np.mean(xs, axis=0))/len(xs)
+
 
 def np_new_cov(xs):
     return jnp.dot((xs - np.mean(xs, axis=0)).T, xs  - np.mean(xs, axis=0))/len(xs)
 
 def new_beta_second_shift_estimator(F, x_0, alpha, N, jrandom_key):
     # Note, i could not invert the cov at the end to save inversion of the Hessian.
-    sample_points = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, jrandom_key)   
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    sample_points, jrandom_key = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
     out_grads = F.f1(sample_points)
     second_shift_est = new_proper_cov(sample_points, out_grads)
     return second_shift_est.dot(jnp.linalg.inv(np_new_cov(sample_points)))
 
 
-def multi_second_shift_estimator_task(x_0, F, process_N, alpha, L_sample_points, L_grads, pid, jrandom_key):
-    set_seed(seed)
-    # Notice, we should be sharing the radius. Lock is needed to synchronise 
-    sample_points = hit_run(x_0, F, x_0.shape[0], process_N, alpha)
+def multilevel_inv_estimator(F, x_0, alpha, N, d_prime, jrandom_key):
+    d = len(x_0)
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    sample_points, jrandom_key = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
     out_grads = F.f1(sample_points)
-    L_sample_points.append(sample_points)
-    L_grads.append(out_grads)
+    grad_X = new_proper_cov(sample_points, out_grads)
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    U_idxs = jrandom.choice(subkey, a=d, shape=(d_prime,), replace=False)
+    U = jnp.eye(d)[U_idxs].T
+    grad_X_multilevel = U.dot(jnp.linalg.inv(U.T.dot(grad_X).dot(U))).dot(U.T)
+    return np_new_cov(sample_points).dot(grad_X_multilevel)
 
-def multi_beta_second_shift_estimator(F, x_0, alpha, N, control_variate=True, num_processes=1, pool=None):
-    manager = multiprocessing.Manager()
-    if pool is None:
-        pool = multiprocessing.Pool(processes=num_processes)
-        
-    L_sample_points = manager.list()
-    L_grads = manager.list()
-    pool_workers = []
-    for i in range(num_processes):
-        curr_seed = random.randint(0, 10000)
-        p = pool.apply_async(multi_second_shift_estimator_task, (x_0, F, N // num_processes, alpha, L_sample_points, L_grads, i, curr_seed))
-        pool_workers.append(p)
-    
-    pool_workers = [p.wait() for p in pool_workers]
+def multilevel_estimator_woodbury(F, x_0, alpha, N, d_prime, jrandom_key):
+    """Return C_inv, W, V for woodbury"""
+    d = len(x_0)
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    sample_points, jrandom_key = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
+    out_grads = F.f1(sample_points)
+    grad_X = new_proper_cov(sample_points, out_grads)
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    U_idxs = jrandom.choice(subkey, a=d, shape=(d_prime,), replace=False)
+    U = jnp.eye(d)[U_idxs].T
+    XXt = np_new_cov(sample_points)
+    C_inv = U.T.dot(XXt).dot(U)
+    W = grad_X.dot(XXt).dot(U)
+    V = U.T.dot(XXt)
+    return C_inv, W, V
 
-    pool.close()
-    pool.join()
-
-    sample_points = np.vstack(list(L_sample_points))
-    out_grads = np.vstack(list(L_grads))
-    second_shift_est = new_proper_cov(sample_points, out_grads)
-    return second_shift_est.dot(np.linalg.inv(np_new_cov(sample_points)))
+def get_neystrom_inv(A, d_prime, jrandom_key):
+    d = len(A)
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    U_idxs = jrandom.choice(subkey, a=d, shape=(d_prime,), replace=False)
+    U = jnp.eye(d)[U_idxs].T
+    A_inv_approx = U.dot(jnp.linalg.inv(U.T.dot(A).dot(U))).dot(U.T)
+    return A_inv_approx
 
 
 # Quadratic Regression

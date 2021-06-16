@@ -150,3 +150,9 @@ def binary_search_zero(f, a, b, eps):
             b = new_x
         else:
             a = new_x
+
+# @jit
+def woordbury_update(A_inv, C_inv, U, V):
+    """(A + UCV)^{-1} = A_inv - A_inv U (C_inv + V A_inv U)^{-1} V A_inv"""
+    mid_inv = jnp.linalg.inv(C_inv + jnp.dot(V, jnp.dot(A_inv, U)))
+    return A_inv - jnp.dot(A_inv, jnp.dot(U, jnp.dot(mid_inv, jnp.dot(V, A_inv))))

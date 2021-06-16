@@ -1,6 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
-from .derivative_free_estimation import new_beta_second_shift_estimator, multi_beta_second_shift_estimator
+from .derivative_free_estimation import new_beta_second_shift_estimator
 import multiprocessing
 
 # We expect X to be a (N, d) array, where d is the dimensionality and N is the number of datapoints. 

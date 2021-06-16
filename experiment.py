@@ -48,7 +48,7 @@ config["num_particles"] = 1
 # config["x_range"] = [-0.002, 0.002]
 
 config["domain_name"] = "Polytope"
-config["domain_meta"] = {"seed": 10, "num_barriers": dim * 10}
+config["domain_meta"] = {"seed": 10, "num_barriers": dim * 4}
 
 # function
 
@@ -63,16 +63,18 @@ config["optimization_name"] = "Newton_shift_est_IPM"
 #     config["optimization_name"] = "BFGS"
 # else:
 #     config["optimization_name"] = "Newton_IPM"
+# "Newton_multilevel_est_IPM"
 
 config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, 
-								"barrier_type": "log", "delta": 0.1, "jrandom_key": 0}
+								"barrier_type": "log", "delta": 0.5, "jrandom_key": 0,
+                                "with_neystrom": False}
 
 
 # meta parameters (seed, how to save etc.)
 
 config["seed"] = 0
 config["return_full_path"] = True
-config["num_steps"] = 25
+config["num_steps"] = 15
 
 # --- Set up folder in which to store all results ---
 folder_name = new_adv.save_load.get_file_stamp(config["optimization_name"])
