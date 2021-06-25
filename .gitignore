@@ -1,2 +1,8 @@
 experiments/
 *.sh*
+data/
+build/
+dist/
+new_adventure.egg-info
+new_adventures.egg-info
+slurm*

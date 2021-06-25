@@ -110,8 +110,6 @@ class Gaussian_example2:
             L_hats.append(L_hat)
         return L_hats
 
-
-
 class LinearCombination():
 
     def __init__(self, obj, barrier, weights):
@@ -176,3 +174,19 @@ class BetaShiftEstimation():
     def f2_inv(self, x, num_samples = None, jrandom_key=None):
         f2 = self.f2(x, num_samples, jrandom_key)
         return np.array([np.linalg.inv(f2[i]) for i in range(len(f2))])
+
+
+class GaussianLinearModel:
+
+    def __init__(data):
+        self.A, self.b = data  # (num_datapoints, d), (num_datapoints)
+
+    def f(self, x):
+        """x.shape = (N, d)"""
+        return 1./len(self.A) * 0.5 * jnp.linalg.norm(jnp.dot(self.A, x.T).T - self.b, axis=1)**2 
+
+    def f1(self, x):
+        return 1./len(self.A) * self.A.T.dot((jnp.dot(self.A, x.T).T - self.b).T)
+
+    def f2(self, x):
+        return 1./len(self.A) * self.A.T.dot(self.A)

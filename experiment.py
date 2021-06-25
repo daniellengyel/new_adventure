@@ -41,14 +41,14 @@ config = {}
 
 
 # particle init 
-dim = 750
+dim = 7500
 config["domain_dim"] = dim
 config["particle_init"] = "origin"
 config["num_particles"] = 1
 # config["x_range"] = [-0.002, 0.002]
 
 config["domain_name"] = "Polytope"
-config["domain_meta"] = {"seed": 10, "num_barriers": dim * 4}
+config["domain_meta"] = {"seed": 10, "num_barriers": dim * 5}
 
 # function
 
@@ -56,7 +56,7 @@ config["potential_name"] = "linear"
 config["potential_meta"] = {"direction_name": "ones"} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
 
 # optimization
-config["optimization_name"] = "Newton_shift_est_IPM"
+config["optimization_name"] = "Newton_multilevel_est_IPM"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
 # elif ARRAY_INDEX == 1:
@@ -64,17 +64,19 @@ config["optimization_name"] = "Newton_shift_est_IPM"
 # else:
 #     config["optimization_name"] = "Newton_IPM"
 # "Newton_multilevel_est_IPM"
+# "Gradient_Descent"
 
 config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, 
 								"barrier_type": "log", "delta": 0.5, "jrandom_key": 0,
-                                "with_neystrom": False}
+                                "with_neystrom": False, "d_prime": 1000, "num_samples": 1000, "alpha": 500}
 
 
 # meta parameters (seed, how to save etc.)
 
 config["seed"] = 0
-config["return_full_path"] = True
-config["num_steps"] = 15
+config["return_full_path"] = False
+config["num_path_steps"] = 15
+config["num_total_steps"] = 100 # including within a path update step
 
 # --- Set up folder in which to store all results ---
 folder_name = new_adv.save_load.get_file_stamp(config["optimization_name"])
@@ -90,3 +92,7 @@ os.makedirs(folder_path)
 analysis = experiment_run(config, folder_path) #tune.run(lambda config_inp:  experiment_run(config_inp, folder_path), config=config)
 print(analysis)
 
+# TODO 
+# derivative free: choose subspace 
+# finite difference implementation 
+# look into what panos sent

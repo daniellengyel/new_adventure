@@ -6,7 +6,7 @@ from .Optimizers import get_optimizer
 
 import time
 
-"""Particle output will have the shape [[[]-particles]-timesteps] or paths[time_step][particle_idx]"""
+"""Particle output will have the shape [[[]-particles]-timesteps] or paths[time_step][particle_idx]. Vals output has shape [[(obj, barrier, time)]-timestep]"""
 
 
 
@@ -14,33 +14,24 @@ import time
 def optimize(config, verbose=False):
 
     # init num_particles
-    all_paths = []
+    all_vals = []
     p_start = get_particles(config)
     p_curr = np.array([np.array(p) for p in p_start])
     p_num_particles = len(p_start)
 
-    num_steps = config["num_steps"]
+    num_steps = config["num_path_steps"]
 
     # get optimization method
     opt = get_optimizer(config) # gets the barrier and objective function
 
-    # TODO init saving
-    # file_stamp = str(time.time())  # get_file_stamp()
-    # writer = SummaryWriter("{}/runs/{}".format(folder_path, file_stamp))
-
     if config["seed"] is not None:
         np.random.seed(config["seed"])
-    
 
     for t in range(num_steps):
         print(t)
 
-        full_update_path = opt.update(p_curr, t)
-        all_paths.append(full_update_path)
-        p_curr = full_update_path[-1][0].copy()
-
-        # if (t % 50) == 0 and verbose:
-        #     print("Iteration", t)
-        #     print("diff", np.abs(func(x_next) - func(x_curr)))
+        p_curr, obj_barrier_vals = opt.update(p_curr, t, full_obj_barrier_vals=True)
+        p_curr = p_curr.copy()
+        all_vals.append(obj_barrier_vals)
         
-    return all_paths
+    return all_vals

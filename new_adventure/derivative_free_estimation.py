@@ -4,6 +4,7 @@ import multiprocessing
 import random 
 from jax import random as jrandom
 import jax.numpy as jnp
+import jax
 
 def set_seed(seed):
     if seed is None:
@@ -24,9 +25,17 @@ def hit_run(x_0, barrier, dim, N, alpha):
     beta_p = (np.random.beta(alpha, alpha, size=(N, 1)) - 0.5) * 2 * radius 
     return x_0 + dirs * beta_p
 
-def jax_hit_run(x_0, barrier, dim, N, alpha, key):
+def jax_hit_run(x_0, barrier, dim, N, alpha, key, chosen_basis_idx=None):
     key, subkey = jrandom.split(key)
-    dirs = jrandom.normal(subkey, shape=(N, dim)) # sample gaussian and normalize 
+    # sample gaussian and normalize 
+    if chosen_basis_idx is None:
+        dirs = jrandom.normal(subkey, shape=(N, dim)) 
+    else:
+        dirs = jrandom.normal(subkey, shape=(N, len(chosen_basis_idx)))
+        temp_dirs = jnp.zeros((dim, N))
+        temp_dirs = jax.ops.index_update(temp_dirs, chosen_basis_idx, dirs.T)
+        dirs = temp_dirs.T
+
     dirs = dirs/jnp.linalg.norm(dirs, axis=1).reshape(-1, 1)
     dists = barrier.dir_dists(x_0, dirs) # for each dir get distance to boundary
     radius = jnp.min(dists[0])
@@ -76,6 +85,22 @@ def multilevel_inv_estimator(F, x_0, alpha, N, d_prime, jrandom_key):
     grad_X_multilevel = U.dot(jnp.linalg.inv(U.T.dot(grad_X).dot(U))).dot(U.T)
     return np_new_cov(sample_points).dot(grad_X_multilevel)
 
+def multilevel_update_direction(F, x_0, alpha, N, d_prime, jrandom_key):
+    d = len(x_0)
+
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    U_idxs = jrandom.choice(subkey, a=d, shape=(d_prime,), replace=False)
+    U = jnp.eye(d)[U_idxs].T # (d, d')
+
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    sample_points, jrandom_key = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey, chosen_basis_idx=U_idxs)  
+    X = (sample_points - jnp.mean(sample_points, axis=0)).T # (d, N)
+    out_grads = F.f1(sample_points)
+
+    gradF = F.f1(jnp.array([x_0]))[0]
+    grad_X_low_inv = jnp.linalg.inv(out_grads.T[U_idxs].dot(X[U_idxs].T)/float(N))
+    return -X.dot(X.T.dot(U.dot(grad_X_low_inv.dot(U.T.dot(gradF))))) / float(N)
+
 def multilevel_estimator_woodbury(F, x_0, alpha, N, d_prime, jrandom_key):
     """Return C_inv, W, V for woodbury"""
     d = len(x_0)
@@ -100,6 +125,13 @@ def get_neystrom_inv(A, d_prime, jrandom_key):
     A_inv_approx = U.dot(jnp.linalg.inv(U.T.dot(A).dot(U))).dot(U.T)
     return A_inv_approx
 
+def get_neystrom_inv_direction(A, d_prime, grad, jrandom_key):
+    d = len(A)
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    U_idxs = jrandom.choice(subkey, a=d, shape=(d_prime,), replace=False)
+    U = jnp.eye(d)[U_idxs].T
+    dir_approx = U.dot(jnp.linalg.inv(U.T.dot(A).dot(U)).dot(U.T.dot(grad)))
+    return dir_approx
 
 # Quadratic Regression
 def get_quadratic_data_matrix(xs):
