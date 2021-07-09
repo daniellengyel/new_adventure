@@ -25,8 +25,8 @@ def hit_run(x_0, barrier, dim, N, alpha):
     beta_p = (np.random.beta(alpha, alpha, size=(N, 1)) - 0.5) * 2 * radius 
     return x_0 + dirs * beta_p
 
-def jax_hit_run(x_0, barrier, dim, N, alpha, key, chosen_basis_idx=None):
-    key, subkey = jrandom.split(key)
+def jax_hit_run(x_0, F, dim, N, alpha, new_jrandom_key, chosen_basis_idx=None):
+    new_jrandom_key, subkey = jrandom.split(new_jrandom_key)
     # sample gaussian and normalize 
     if chosen_basis_idx is None:
         dirs = jrandom.normal(subkey, shape=(N, dim)) 
@@ -37,12 +37,12 @@ def jax_hit_run(x_0, barrier, dim, N, alpha, key, chosen_basis_idx=None):
         dirs = temp_dirs.T
 
     dirs = dirs/jnp.linalg.norm(dirs, axis=1).reshape(-1, 1)
-    dists = barrier.dir_dists(x_0, dirs) # for each dir get distance to boundary
-    radius = jnp.min(dists[0])
+    dists = F.dir_dists(x_0, dirs) # for each dir get distance to boundary
 
-    new_jrandom_key, subkey = jrandom.split(key)
+    radius = jnp.min(dists[0])
+    new_jrandom_key, subkey = jrandom.split(new_jrandom_key)
     beta_p = (jrandom.beta(subkey, alpha, alpha, shape=(N, 1)) - 0.5) * 2 * radius 
-    return x_0 + dirs * beta_p, new_jrandom_key
+    return x_0 + dirs * beta_p, radius
 
 
 def is_expectation(xs, weights):
@@ -50,25 +50,50 @@ def is_expectation(xs, weights):
     return xs.T.dot(weights) / xs.shape[0]
 
 
-def beta_first_shift_estimator(F, x_0, alpha, N, control_variate=True):
-    sample_points = hit_run(x_0, F, x_0.shape[0], N, alpha)
+def beta_first_shift_estimator(F, x_0, alpha, N, jrandom_key):
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    sample_points = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)
     out_points = F.f(sample_points)
-    is_exp = is_expectation(sample_points - np.mean(sample_points, axis=0), out_points)
-    return np.linalg.inv(np.cov(sample_points.T)).dot(is_exp) #* (8 * a + 4) / (2*radius)**3
+    is_exp = is_expectation(sample_points - jnp.mean(sample_points, axis=0), out_points)
+    return jnp.linalg.inv(jnp.cov(sample_points.T)).dot(is_exp) #* (8 * a + 4) / (2*radius)**3
 
 def new_proper_cov(xs, grads):
     """xs.shape = [N, d], grads = [N, d]"""
-    return grads.T.dot(xs - np.mean(xs, axis=0))/len(xs)
+    return grads.T.dot(xs - jnp.mean(xs, axis=0))/len(xs)
 
+def get_A(xs):
+    """xs.shape = [N, d]"""
+    xs -= jnp.mean(xs, axis=0)
+    curr_m = (xs ** 2).T.dot(xs ** 2)
+    curr_m = curr_m / len(xs)
+    return curr_m
 
 def np_new_cov(xs):
-    return jnp.dot((xs - np.mean(xs, axis=0)).T, xs  - np.mean(xs, axis=0))/len(xs)
+    return jnp.dot((xs - jnp.mean(xs, axis=0)).T, xs  - jnp.mean(xs, axis=0))/len(xs)
+
+def beta_second_shift_estimator(F, x_0, alpha, N, jrandom_key):
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    sample_points, radius = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)
+    out_points = F.f(sample_points)
+    diffs = sample_points -  jnp.mean(sample_points, axis=0) 
+    second_shift_est =  diffs.T.dot(diffs * out_points.reshape(-1, 1)) / len(diffs)
+
+    grads_inners = F.f1(x_0.reshape(1, -1))[0].dot(diffs.T) # N
+
+    a = diffs.T.dot(diffs * grads_inners.reshape(-1, 1)) / len(diffs)
+    
+    second_shift_est -= F.f(x_0.reshape(1, -1))[0] * (radius**2)/float(1 + 2 * alpha) # diffs.T.dot(diffs)/len(diffs) # - a   
+
+    A = jnp.array([[3*radius**4 / float(3 + 8*alpha + 4 * alpha**2)]]) # get_A(sample_points)
+
+    return  2*jnp.eye(len(x_0)) * jnp.linalg.inv(A).dot(jnp.diag(second_shift_est)) # 2*((second_shift_est - jnp.eye(len(x_0)) * jnp.diag(second_shift_est))/(A*2.) +
 
 def new_beta_second_shift_estimator(F, x_0, alpha, N, jrandom_key):
     # Note, i could not invert the cov at the end to save inversion of the Hessian.
     jrandom_key, subkey = jrandom.split(jrandom_key)
-    sample_points, jrandom_key = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
-    out_grads = F.f1(sample_points)
+    sample_points, radius = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    out_grads = F.f1(sample_points, subkey)
     second_shift_est = new_proper_cov(sample_points, out_grads)
     return second_shift_est.dot(jnp.linalg.inv(np_new_cov(sample_points)))
 
@@ -76,7 +101,7 @@ def new_beta_second_shift_estimator(F, x_0, alpha, N, jrandom_key):
 def multilevel_inv_estimator(F, x_0, alpha, N, d_prime, jrandom_key):
     d = len(x_0)
     jrandom_key, subkey = jrandom.split(jrandom_key)
-    sample_points, jrandom_key = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
+    sample_points, radius = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
     out_grads = F.f1(sample_points)
     grad_X = new_proper_cov(sample_points, out_grads)
     jrandom_key, subkey = jrandom.split(jrandom_key)
@@ -93,7 +118,7 @@ def multilevel_update_direction(F, x_0, alpha, N, d_prime, jrandom_key):
     U = jnp.eye(d)[U_idxs].T # (d, d')
 
     jrandom_key, subkey = jrandom.split(jrandom_key)
-    sample_points, jrandom_key = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey, chosen_basis_idx=U_idxs)  
+    sample_points, radius = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey, chosen_basis_idx=U_idxs)  
     X = (sample_points - jnp.mean(sample_points, axis=0)).T # (d, N)
     out_grads = F.f1(sample_points)
 
@@ -105,7 +130,7 @@ def multilevel_estimator_woodbury(F, x_0, alpha, N, d_prime, jrandom_key):
     """Return C_inv, W, V for woodbury"""
     d = len(x_0)
     jrandom_key, subkey = jrandom.split(jrandom_key)
-    sample_points, jrandom_key = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
+    sample_points, radius = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)   
     out_grads = F.f1(sample_points)
     grad_X = new_proper_cov(sample_points, out_grads)
     jrandom_key, subkey = jrandom.split(jrandom_key)

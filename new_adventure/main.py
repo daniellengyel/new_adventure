@@ -2,7 +2,8 @@ import numpy as np
 
 from .utils import *
 from .Functions import *
-from .Optimizers import get_optimizer
+from .IPMOptimizers import get_optimizer as get_ipm_opt
+from .UnconstrainedOptimizers import get_optimizer as get_unc_opt
 
 import time
 
@@ -22,7 +23,10 @@ def optimize(config, verbose=False):
     num_steps = config["num_path_steps"]
 
     # get optimization method
-    opt = get_optimizer(config) # gets the barrier and objective function
+    if config["optimization_type"] == "Unconstrained":
+        opt = get_unc_opt(config) 
+    elif config["optimization_type"] == "IPM":  
+        opt = get_ipm_opt(config)
 
     if config["seed"] is not None:
         np.random.seed(config["seed"])
@@ -30,7 +34,7 @@ def optimize(config, verbose=False):
     for t in range(num_steps):
         print(t)
 
-        p_curr, obj_barrier_vals = opt.update(p_curr, t, full_obj_barrier_vals=True)
+        p_curr, obj_barrier_vals = opt.update(p_curr, t, full_vals=True)
         p_curr = p_curr.copy()
         all_vals.append(obj_barrier_vals)
         

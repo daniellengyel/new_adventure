@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import jax
 from functools import partial
 from jax import jit
+import jax.random as jrandom
 
 class LogPolytopeBarrier:
 
@@ -14,6 +15,8 @@ class LogPolytopeBarrier:
         self.ws = jnp.array(ws)
         self.bs = jnp.array(bs)
         self.dim = len(ws[0])
+
+        self.jrandom_key = jrandom.PRNGKey(1)
 
     # @partial(jit, static_argnums=(0,))
     def _get_dists(self, xs):
@@ -45,9 +48,10 @@ class LogPolytopeBarrier:
         return ret
 
     # @partial(jit, static_argnums=(0,))
-    def f1(self, xs):
+    def f1(self, xs, jrandom_key=None):
         dists, signs = self._get_dists(xs)
         grads = (1/dists * signs).dot((-self.ws / jnp.linalg.norm(self.ws, axis=1).T.reshape(-1, 1)))
+
         return grads
 
     # @partial(jit, static_argnums=(0,))
@@ -57,7 +61,10 @@ class LogPolytopeBarrier:
         hess = []
         for i in range(len(xs)):
             hess.append(jnp.dot(normalized_ws.T, 1/(dists[i].reshape(-1, 1))**2 * normalized_ws))
-        return jnp.array(hess)
+
+        
+        hess = jnp.array(hess)
+        return hess 
     
     # @partial(jit, static_argnums=(0,))
     def f2_inv(self, x):

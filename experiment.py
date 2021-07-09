@@ -41,9 +41,9 @@ config = {}
 
 
 # particle init 
-dim = 7500
+dim = 100
 config["domain_dim"] = dim
-config["particle_init"] = "origin"
+config["particle_init"] = "origin" # "function_specific"
 config["num_particles"] = 1
 # config["x_range"] = [-0.002, 0.002]
 
@@ -53,10 +53,12 @@ config["domain_meta"] = {"seed": 10, "num_barriers": dim * 5}
 # function
 
 config["potential_name"] = "linear"
-config["potential_meta"] = {"direction_name": "ones"} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
+config["potential_meta"] = {"seed": 10, "direction_name": "ones"}#{"seed": 10, "num_tesselations": 10, "tesselation_domain": [-10, 10]} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
 
 # optimization
-config["optimization_name"] = "Newton_multilevel_est_IPM"
+config["optimization_type"] = "IPM"
+config["optimization_name"] = "Newton_IPM"
+# "GaussianSmoothing"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
 # elif ARRAY_INDEX == 1:
@@ -66,9 +68,10 @@ config["optimization_name"] = "Newton_multilevel_est_IPM"
 # "Newton_multilevel_est_IPM"
 # "Gradient_Descent"
 
-config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, 
-								"barrier_type": "log", "delta": 0.5, "jrandom_key": 0,
-                                "with_neystrom": False, "d_prime": 1000, "num_samples": 1000, "alpha": 500}
+config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, "barrier_type": "log",
+								"delta": 0.5, "jrandom_key": 0,
+                                "with_neystrom": False, "d_prime": 1000, "num_samples": 5000, "alpha": 500, "sigma": 0.5,
+                                "automatic_diff": True}
 
 
 # meta parameters (seed, how to save etc.)

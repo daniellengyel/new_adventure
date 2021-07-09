@@ -1,7 +1,8 @@
-from .Functions import Quadratic, Ackley, Linear
+from .Functions import Quadratic, Ackley, Linear, Tesselated, MAXQ
 from .Barriers import LogPolytopeBarrier
 import numpy as np
 import jax.numpy as jnp
+import jax.random as jrandom
 import random
 
 def get_potential(config):
@@ -21,6 +22,19 @@ def get_potential(config):
         F = Linear(c)
     elif config["potential_name"] == "Ackley":
         F = Ackley()
+    elif config["potential_name"] == "TesselatedQuadratic":
+        jrandom_key = jrandom.PRNGKey(config["potential_meta"]["seed"])
+        # Get Q and b 
+        jrandom_key, subkey = jrandom.split(jrandom_key)
+        Q = jrandom.normal(key=subkey, shape=(config["domain_dim"], config["domain_dim"], ))
+        jrandom_key, subkey = jrandom.split(jrandom_key)
+        b = jrandom.normal(key=subkey, shape=(config["domain_dim"], ))
+
+        q_func = Quadratic(Q, b)
+        F = Tesselated(q_func, config["potential_meta"]["num_tesselations"], {"bound": config["potential_meta"]["tesselation_domain"], "dim":config["domain_dim"]}, jrandom_key)
+    elif config["potential_name"] == "MAXQ":
+        F = MAXQ()
+
     else:
         raise ValueError("Does not support given function {}".format(config["potential_name"]))
     return F    
@@ -57,7 +71,27 @@ def get_particles(config):
     #     particles = [p for _ in range(num_particles)]
     if config["particle_init"] == "origin":
         num_particles = config["num_particles"]
-        particles = [np.zeros(config["domain_dim"]) for _ in range(num_particles)]
+        particles = [jnp.zeros(config["domain_dim"]) for _ in range(num_particles)]
+    elif config["particle_init"] == "function_specific":
+        if config["potential_name"] == "MAXQ":
+            num_particles = config["num_particles"]
+            particles = [jnp.array([-4.08653571, -4.13286989, -3.95076614, -4.15547513, -3.49994787, -3.57026795,
+  -3.7938423 , -4.12136015, -3.65786342, -4.07157976, -4.2349544 , -3.428094,
+  -4.23294738, -4.23543057, -4.01950864, -4.22205812, -4.1754283 , -3.99612619,
+  -3.41018688, -4.0687547 , -3.67556994, -3.84908772, -3.98871223, -3.86126325,
+  -3.36466582, -3.3261831 , -4.21375671, -4.29674189, -4.21564043, -4.28309616,
+  -4.23919035, -3.89637401, -4.29584853, -3.82188051, -4.1372486 , -4.20578596,
+  -3.83789293, -4.23093461, -3.8112112 , -3.7979367 , -4.16727839, -3.93755917,
+  -3.86394499, -3.83850989, -4.28515094, -3.93463323, -3.61277935, -3.66578832,
+  -3.68904054, -4.07395594, -3.39706506, -3.8093003 , -3.90893972, -4.2108115,
+  -4.03895986, -4.23518914, -3.68259048, -3.69635024, -3.28611546, -4.30379517,
+  -4.07922212, -3.50977417, -4.1484698 , -3.53270307, -4.06869231, -3.41841916,
+  -4.05838022, -3.68581409, -4.07195305, -3.90964769, -3.96420945, -4.09866475,
+  -4.06873767, -3.74638503, -4.12283425, -3.56686407, -3.47421458, -3.45025409,
+  -3.65747365, -3.70107743, -4.15962439, -4.29960385, -4.11018416, -3.18124287,
+  -3.56384593, -3.65123884, -4.00761417, -4.25759951, -3.88235651, -3.69468319,
+  -4.03985722, -4.06003586, -4.08625979, -4.11675827, -4.16695674, -3.65293747,
+  -4.25515595, -3.83481097, -3.9418322 , -3.30547283,])] # [jnp.array([1. * i * (1 - 2*int(i + 1 > config["domain_dim"]/2.)) for i in range(config["domain_dim"])]) for _ in range(num_particles)]
     else:
         raise ValueError("Does not support given function {}.".format(config["particle_init"]))
     return np.array(particles)

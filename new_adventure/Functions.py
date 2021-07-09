@@ -1,5 +1,6 @@
 import numpy as np
 import jax.numpy as jnp
+import jax.random as jrandom
 from .derivative_free_estimation import new_beta_second_shift_estimator
 import multiprocessing
 
@@ -11,22 +12,20 @@ import multiprocessing
 # output of f2 is of shape (N, d, d)
 
 
-       
-
-   
 class Quadratic:
-    def __init__(self, Q):
+    def __init__(self, Q, b):
         self.Q = Q
-        self.Q_inv = np.linalg.inv(Q)
+        self.Q_inv = jnp.linalg.inv(Q)
+        self.b = b
         
     def f(self, X):
         Y = np.dot(self.Q, X.T)
-        Y = np.diag(np.dot(X, Y)) # TODO fix. inefficient way to remove x_j^T Q x_i for i != j. 
+        Y = jnp.diag(jnp.dot(X, Y)) + X.dot(self.b) # TODO fix. inefficient way to remove x_j^T Q x_i for i != j. 
         return Y
     
     def f1(self, X):
-        Y = 2*np.dot(self.Q, X.T)
-        return Y.T
+        Y = 2*jnp.dot(self.Q, X.T)
+        return Y.T + self.b
     
     def f2(self, X):
         return 2 * np.array([list(self.Q)] * X.shape[0])
@@ -110,6 +109,8 @@ class Gaussian_example2:
             L_hats.append(L_hat)
         return L_hats
 
+
+
 class LinearCombination():
 
     def __init__(self, obj, barrier, weights):
@@ -122,8 +123,8 @@ class LinearCombination():
         res = jnp.sum(jnp.array([jnp.multiply(w, f.f(X)) for w, f in zip(self.weights, self.funcs)]), axis=0)
         return res
 
-    def f1(self, X):
-        res = jnp.sum(jnp.array([jnp.multiply(w, f.f1(X)) for w, f in zip(self.weights, self.funcs)]), axis=0)
+    def f1(self, X, jrandom_key=None):
+        res = jnp.sum(jnp.array([jnp.multiply(w, f.f1(X, jrandom_key)) for w, f in zip(self.weights, self.funcs)]), axis=0)
         return res
 
     def f2(self, X):
@@ -145,7 +146,7 @@ class Linear:
     def f(self, X):
         return X.dot(self.c) #/ float(len(self.c))
 
-    def f1(self, X):
+    def f1(self, X, jrandom_key=None):
         return np.tile(self.c, (X.shape[0], 1)) #/ float(len(self.c))
 
     def f2(self, X):
@@ -176,17 +177,93 @@ class BetaShiftEstimation():
         return np.array([np.linalg.inv(f2[i]) for i in range(len(f2))])
 
 
-class GaussianLinearModel:
+class GaussianSmoothing:
+    def __init__(self, func, N, sigma):
+        self.func = func
+        self.N = N
+        self.sigma = sigma
+    
+    def f(self, X, jrandom_key, sigma):
+        d = X.shape[1]
+        cov = sigma**2*jnp.eye(d)
+        jrandom_key, subkey = jrandom.split(jrandom_key)
+        x_samples = jrandom.multivariate_normal(key=subkey, mean=X, cov=cov, shape=(self.N, len(X), )).transpose(1, 0, 2)
+        f_out = self.func.f(x_samples.reshape(-1, d)).reshape(len(X), self.N)
+        return jnp.mean(f_out, axis=1)
+        
+    def f1(self, X, jrandom_key, sigma):
+        d = X.shape[1]
+        cov = sigma**2*jnp.eye(d)
+        jrandom_key, subkey = jrandom.split(jrandom_key)
+        x_samples = jrandom.multivariate_normal(key=subkey, mean=X, cov=cov, shape=(self.N, len(X), )).transpose(1, 0, 2)
+        
+        f_out = self.func.f(x_samples.reshape(-1, d)).reshape(len(X), self.N)
+        
+        res = []
+        for i in range(len(X)):
+            x_diff = x_samples[i] - jnp.mean(x_samples[i]) # N, d
+            cov_inv = jnp.linalg.inv(x_diff.T.dot(x_diff) / self.N)
+            res.append(cov_inv.dot((x_samples[i] - jnp.mean(x_samples[i])).T.dot(f_out[i])) / self.N)
+        res = jnp.array(res)
+        return res # jnp.linalg.inv(cov).dot(res.T).T
+    
+    def f2(self, X, jrandom_key, sigma):
+        d = X.shape[1]
+        cov = sigma**2*jnp.eye(d)
+        jrandom_key, subkey = jrandom.split(jrandom_key)
+        x_samples = jrandom.multivariate_normal(key=subkey, mean=X, cov=cov, shape=(self.N, len(X), )).transpose(1, 0, 2)
+        
+        f_out = self.func.f(x_samples.reshape(-1, d)).reshape(len(X), self.N)
+        
+        res = []
+        for i in range(len(X)):
+            x_diff = x_samples[i] - jnp.mean(x_samples[i]) # N, d
+            cov_inv = jnp.linalg.inv(x_diff.T.dot(x_diff) / self.N)
 
-    def __init__(data):
-        self.A, self.b = data  # (num_datapoints, d), (num_datapoints)
+            res.append( (cov_inv.dot(x_diff.T * f_out[i]).dot(x_diff).dot(cov_inv) - cov_inv * jnp.sum(f_out[i]) ) / self.N) 
+        res = jnp.array(res)
+        return res
+    
+class Tesselated:
+    def __init__(self, func, N, domain, jrandom_key):
+        self.func = func
+        self.N = N
+        self.domain = domain
+        S = jrandom.uniform(jrandom_key, shape=(self.N, domain["dim"]), minval=domain["bound"][0], maxval=domain["bound"][1])
+        self.m = func.f1(S)
+        self.b = func.f(S) - jnp.sum(self.m * S, axis=1) # we have y = f + grad (x - x_0) = f - grad x_0 + grad x
+                    
+    def f(self, X):
+        return jnp.max(self.b + X.dot(self.m.T), axis=1)
+    
+    def f_all(self, X):
+        """For ploting:
+        out_all = t.f_all(X)
+        for x in out_all.T:
+            plt.scatter(X, x)"""
+        return self.b + X.dot(self.m.T)
 
-    def f(self, x):
-        """x.shape = (N, d)"""
-        return 1./len(self.A) * 0.5 * jnp.linalg.norm(jnp.dot(self.A, x.T).T - self.b, axis=1)**2 
+    def f1(self, X):
+        argmax_idxs = jnp.argmax(self.b + X.dot(self.m.T), axis=1)
+        return jnp.array([self.m[argmax_idxs[i]] for i in range(len(X))])
 
-    def f1(self, x):
-        return 1./len(self.A) * self.A.T.dot((jnp.dot(self.A, x.T).T - self.b).T)
+    def f2(self, X):
+        return 0
 
-    def f2(self, x):
-        return 1./len(self.A) * self.A.T.dot(self.A)
+class MAXQ:
+    def __init__(self):
+        pass
+
+    def f(self, X):
+        return jnp.max(X**2, axis=1)
+
+    def f1(self, X):
+        pass
+        # argmax_idxs = jnp.argmax(X**2, axis=1)
+        # g = np.zeros(X.shape)
+        # for i in range(len(X)):
+        #     g[i][argmax_idxs[i]] = 2*X[i][argmax_idxs[i]]
+        # return jnp.array(g)
+
+    def f2(self, X):
+        pass
