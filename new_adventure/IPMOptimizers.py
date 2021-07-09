@@ -8,7 +8,7 @@ import time, sys
 import pickle
 from .Functions import LinearCombination, BetaShiftEstimation
 from .utils import get_barrier, get_potential, woordbury_update
-from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator, multilevel_inv_estimator, get_neystrom_inv_direction, multilevel_update_direction
+from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator, multilevel_inv_estimator, get_neystrom_inv_direction, multilevel_update_direction, finite_difference_hessian
 import os, psutil
 process = psutil.Process(os.getpid())
 
@@ -23,6 +23,8 @@ def get_optimizer(config):
         return Newton_multilevel_est_IPM(config)
     elif "Gradient_Descent" == config["optimization_name"]:
         return Gradient_Descent(config)
+    elif "FD_Newton_IPM" == config["optimization_name"]:
+        return FD_Newton_IPM(config)
 
 class OptimizationBlueprint:
     def __init__(self, config):
@@ -137,6 +139,26 @@ class Gradient_Descent(OptimizationBlueprint):
     def step_getter(self, X, jrandom_key, t):
         return -self.combined_F.f1(X)[0]
 
+class FD_Newton_IPM(OptimizationBlueprint):
+    def __init__(self, config):
+        super().__init__(config)
+        self.d_prime = config["optimization_meta"]["d_prime"]
+        self.num_samples = config["optimization_meta"]["num_samples"]
+        self.h = config["optimization_meta"]["h"]
+
+    @partial(jax.jit, static_argnums=(0,))
+    def step_getter(self, X, jrandom_key, t):
+        combined_F = LinearCombination(self.obj, self.barrier, [1, t])
+        jrandom_key, subkey = jrandom.split(jrandom_key)
+        f1 = combined_F.f1(X, subkey)
+        approx_H = finite_difference_hessian(F, X, self.h)
+
+        H_inv = jnp.linalg.inv(approx_H)
+        search_direction = -H_inv.dot(f1[0])
+       
+            
+        return search_direction
+
 
 class Newton_shift_est_IPM(OptimizationBlueprint):
     def __init__(self, config):
@@ -188,6 +210,8 @@ class BFGS(OptimizationBlueprint):
     
     def post_step(self, X, jrandom_key, t):
         self.H_inv = BFGS_update(self.combined_F, self.X_prev, X[0], self.H_inv)
+
+
 
 
 def helper_linesearch(obj, barrier, c1, c2):
