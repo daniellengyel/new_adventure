@@ -41,7 +41,7 @@ config = {}
 
 
 # particle init 
-dim = 100
+dim = 750
 config["domain_dim"] = dim
 config["particle_init"] = "origin" # "function_specific"
 config["num_particles"] = 1
@@ -57,7 +57,7 @@ config["potential_meta"] = {"seed": 10, "direction_name": "ones"}#{"seed": 10, "
 
 # optimization
 config["optimization_type"] = "IPM"
-config["optimization_name"] = "Newton_IPM"
+config["optimization_name"] = "BFGS"
 # "GaussianSmoothing"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
@@ -79,7 +79,7 @@ config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, "barrier_type": "log",
 config["seed"] = 0
 config["return_full_path"] = False
 config["num_path_steps"] = 15
-config["num_total_steps"] = 100 # including within a path update step
+config["num_total_steps"] = 1000 
 
 # --- Set up folder in which to store all results ---
 folder_name = new_adv.save_load.get_file_stamp(config["optimization_name"])
