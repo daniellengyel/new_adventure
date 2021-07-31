@@ -71,7 +71,7 @@ config["optimization_name"] = "FD_Newton_IPM"
 
 config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, "barrier_type": "log",
 								"delta": 0.5, "jrandom_key": 0,
-                                "with_neystrom": False, "d_prime": 1000, "num_samples": 5000, "alpha": 500, "sigma": 0.5, "h": 0.01
+                                "with_neystrom": False, "d_prime": 1000, "num_samples": 5000, "alpha": 500, "sigma": 0.5, "h": 0.01,
                                 "automatic_diff": True}
 
 
