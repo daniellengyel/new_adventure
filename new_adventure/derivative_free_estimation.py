@@ -42,8 +42,22 @@ def jax_hit_run(x_0, F, dim, N, alpha, new_jrandom_key, chosen_basis_idx=None):
     radius = jnp.min(dists[0])
     new_jrandom_key, subkey = jrandom.split(new_jrandom_key)
     beta_p = (jrandom.beta(subkey, alpha, alpha, shape=(N, 1)) - 0.5) * 2 * radius 
-    return x_0 + dirs * beta_p, radius
 
+    res = []
+    res += dirs * beta_p
+    # for _ in range(10):
+    #     new_jrandom_key, subkey = jrandom.split(new_jrandom_key)
+
+    #     res += do_GM(dirs, jrandom.shuffle(subkey, dirs)) * beta_p
+
+
+    return x_0 + jnp.array(res), radius
+
+
+def do_GM(first_dirs, second_dirs):
+
+    new_dirs = second_dirs - first_dirs * jnp.sum(first_dirs * second_dirs, axis=1).reshape(-1, 1)
+    return new_dirs/jnp.linalg.norm(new_dirs, axis=1).reshape(-1, 1)
 
 def is_expectation(xs, weights):
     """xs.shape = (N, d) and weights.shape = (N)"""
@@ -74,19 +88,16 @@ def np_new_cov(xs):
 def beta_second_shift_estimator(F, x_0, alpha, N, jrandom_key):
     jrandom_key, subkey = jrandom.split(jrandom_key)
     sample_points, radius = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey)
+    sample_points = jnp.concatenate([sample_points, 2*x_0 - sample_points])
     out_points = F.f(sample_points)
     diffs = sample_points -  jnp.mean(sample_points, axis=0) 
     second_shift_est =  diffs.T.dot(diffs * out_points.reshape(-1, 1)) / len(diffs)
 
-    grads_inners = F.f1(x_0.reshape(1, -1))[0].dot(diffs.T) # N
+    second_shift_est -= F.f(x_0.reshape(1, -1))[0] * diffs.T.dot(diffs)/len(diffs) 
 
-    a = diffs.T.dot(diffs * grads_inners.reshape(-1, 1)) / len(diffs)
+    A = get_A(sample_points) 
     
-    second_shift_est -= F.f(x_0.reshape(1, -1))[0] * (radius**2)/float(1 + 2 * alpha) # diffs.T.dot(diffs)/len(diffs) # - a   
-
-    A = jnp.array([[3*radius**4 / float(3 + 8*alpha + 4 * alpha**2)]]) # get_A(sample_points)
-
-    return  2*jnp.eye(len(x_0)) * jnp.linalg.inv(A).dot(jnp.diag(second_shift_est)) # 2*((second_shift_est - jnp.eye(len(x_0)) * jnp.diag(second_shift_est))/(A*2.) +
+    return  2*((second_shift_est - jnp.eye(len(x_0)) * jnp.diag(second_shift_est))/(A*2.) + (jnp.eye(len(x_0)) * jnp.linalg.inv(A).dot(jnp.diag(second_shift_est))))
 
 def new_beta_second_shift_estimator(F, x_0, alpha, N, jrandom_key):
     # Note, i could not invert the cov at the end to save inversion of the Hessian.
@@ -195,35 +206,37 @@ def BFGS_update(F, x_0, x_1, inv_hessian_approx=None):
 
 
 # Finite Difference 
-def finite_difference_hessian(F, X, h):
+def finite_difference_hessian(F, X, h, dim):
     hess = []
     all_out_central = F.f(X)
-    for i, x in enumerate(X):
-        x_back = x - jnp.eye(x.shape[0]) * h
-        x_forward = x + jnp.eye(x.shape[0]) * h
+    x = X[0]
+    i = 0
+
+    x_back = x - jnp.eye(x.shape[0]) * h
+    x_forward = x + jnp.eye(x.shape[0]) * h
+    
+    out_back = F.f(x_back)
+    out_forward = F.f(x_forward)
+    
+    curr_hess = jnp.diag((out_back + out_forward - 2 * all_out_central[i]) / h**2) 
+    out_back = F.f(x_back)
+    out_forward = F.f(x_forward)
+    
+    for d in range(dim):
+    
+        x_forward_forward = x + jnp.eye(x.shape[0]) * h + jnp.eye(x.shape[0], k=d) * h
+        x_forward_backward = x + jnp.eye(x.shape[0]) * h - jnp.eye(x.shape[0], k=d) * h
+        x_backward_forward = x - jnp.eye(x.shape[0]) * h + jnp.eye(x.shape[0], k=d) * h
+        x_backward_backward = x - jnp.eye(x.shape[0]) * h - jnp.eye(x.shape[0], k=d) * h
+
+        out_forward_forward = F.f(x_forward_forward)
+        out_forward_backward = F.f(x_forward_backward)
+        out_backward_forward = F.f(x_backward_forward)
+        out_backward_backward = F.f(x_backward_backward)
         
-        out_back = F.f(x_back)
-        out_forward = F.f(x_forward)
+        curr_off_diag = jnp.eye(x.shape[0], k=d) * (out_forward_forward - out_forward_backward - out_backward_forward + out_backward_backward).reshape(-1, 1)/(4.*h**2)
+        curr_hess += curr_off_diag + curr_off_diag.T
         
-        curr_hess = jnp.diag((out_back + out_forward - 2 * all_out_central[i]) / h**2) 
-        out_back = F.f(x_back)
-        out_forward = F.f(x_forward)
-        
-        for d in range(1, len(x)):
-        
-            x_forward_forward = x + jnp.eye(x.shape[0]) * h + jnp.eye(x.shape[0], k=d) * h
-            x_forward_backward = x + jnp.eye(x.shape[0]) * h - jnp.eye(x.shape[0], k=d) * h
-            x_backward_forward = x - jnp.eye(x.shape[0]) * h + jnp.eye(x.shape[0], k=d) * h
-            x_backward_backward = x - jnp.eye(x.shape[0]) * h - jnp.eye(x.shape[0], k=d) * h
-  
-            out_forward_forward = F.f(x_forward_forward)
-            out_forward_backward = F.f(x_forward_backward)
-            out_backward_forward = F.f(x_backward_forward)
-            out_backward_backward = F.f(x_backward_backward)
-            
-            curr_off_diag = jnp.eye(x.shape[0], k=d) * (out_forward_forward - out_forward_backward - out_backward_forward + out_backward_backward).reshape(-1, 1)/(4.*h**2)
-            curr_hess += curr_off_diag + curr_off_diag.T
-            
-        hess.append(curr_hess)
+    hess.append(curr_hess)
         
     return jnp.array(hess)

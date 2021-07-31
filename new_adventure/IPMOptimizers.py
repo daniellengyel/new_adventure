@@ -8,7 +8,7 @@ import time, sys
 import pickle
 from .Functions import LinearCombination, BetaShiftEstimation
 from .utils import get_barrier, get_potential, woordbury_update
-from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator, multilevel_inv_estimator, get_neystrom_inv_direction, multilevel_update_direction, finite_difference_hessian
+from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator, multilevel_inv_estimator, get_neystrom_inv_direction, multilevel_update_direction, finite_difference_hessian, beta_second_shift_estimator
 import os, psutil
 process = psutil.Process(os.getpid())
 
@@ -31,6 +31,7 @@ class OptimizationBlueprint:
         self.config = config
         self.barrier = get_barrier(config)
         self.obj = get_potential(config)
+        self.dim = config["domain_dim"]
         self.c1 = config["optimization_meta"]["c1"]
         self.c2 = config["optimization_meta"]["c2"]
         self.delta = config["optimization_meta"]["delta"]
@@ -151,7 +152,7 @@ class FD_Newton_IPM(OptimizationBlueprint):
         combined_F = LinearCombination(self.obj, self.barrier, [1, t])
         jrandom_key, subkey = jrandom.split(jrandom_key)
         f1 = combined_F.f1(X, subkey)
-        approx_H = finite_difference_hessian(F, X, self.h)
+        approx_H = finite_difference_hessian(combined_F, X, self.h, self.dim)[0]
 
         H_inv = jnp.linalg.inv(approx_H)
         search_direction = -H_inv.dot(f1[0])
@@ -172,7 +173,7 @@ class Newton_shift_est_IPM(OptimizationBlueprint):
         combined_F = LinearCombination(self.obj, self.barrier, [1, t])
         jrandom_key, subkey = jrandom.split(jrandom_key)
         f1 = combined_F.f1(X, subkey)
-        approx_H = new_beta_second_shift_estimator(combined_F, X[0], self.alpha, self.num_samples, jrandom_key)
+        approx_H = beta_second_shift_estimator(combined_F, X[0], self.alpha, self.num_samples, jrandom_key)
         
         if not self.with_neystrom:
             H_inv = jnp.linalg.inv(approx_H)

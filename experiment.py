@@ -41,7 +41,7 @@ config = {}
 
 
 # particle init 
-dim = 750
+dim = 100
 config["domain_dim"] = dim
 config["particle_init"] = "origin" # "function_specific"
 config["num_particles"] = 1
@@ -57,7 +57,7 @@ config["potential_meta"] = {"seed": 10, "direction_name": "ones"}#{"seed": 10, "
 
 # optimization
 config["optimization_type"] = "IPM"
-config["optimization_name"] = "FD_Newton_IPM"
+config["optimization_name"] = "Newton_shift_est_IPM"
 # "GaussianSmoothing"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
