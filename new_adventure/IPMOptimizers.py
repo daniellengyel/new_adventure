@@ -6,25 +6,25 @@ from functools import partial
 from jax import lax
 import time, sys
 import pickle
-from .Functions import LinearCombination, BetaShiftEstimation
-from .utils import get_barrier, get_potential, woordbury_update
-from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator, multilevel_inv_estimator, get_neystrom_inv_direction, multilevel_update_direction, finite_difference_hessian, beta_second_shift_estimator
+from .Functions import LinearCombination
+from .utils import get_barrier, get_potential
+from .derivative_free_estimation import BFGS_update, beta_2E1, multilevel_beta_inv_2E1, neystrom_update_direction, multilevel_beta_newton_update_2E1_1E1, FD_2FD1
 import os, psutil
 process = psutil.Process(os.getpid())
 
 def get_optimizer(config):
     if "Newton_IPM" == config["optimization_name"]:
         return Newton_IPM(config)
-    elif "Newton_shift_est_IPM" == config["optimization_name"]:
-        return Newton_shift_est_IPM(config)
+    elif "Newton_2B1_IPM" == config["optimization_name"]:
+        return Newton_2B1_IPM(config)
     elif "BFGS" == config["optimization_name"]:
         return BFGS(config)
-    elif "Newton_multilevel_est_IPM" == config["optimization_name"]:
-        return Newton_multilevel_est_IPM(config)
+    elif "Newton_multilevel_2B1_IPM" == config["optimization_name"]:
+        return Newton_multilevel_2B1_IPM(config)
     elif "Gradient_Descent" == config["optimization_name"]:
         return Gradient_Descent(config)
-    elif "FD_Newton_IPM" == config["optimization_name"]:
-        return FD_Newton_IPM(config)
+    elif "Newton_2FD1_IPM" == config["optimization_name"]:
+        return Newton_2FD1_IPM(config)
 
 class OptimizationBlueprint:
     def __init__(self, config):
@@ -129,7 +129,7 @@ class Newton_IPM(OptimizationBlueprint):
             search_direction = -H_inv.dot(f1)
         else:
             f1 = self.combined_F.f1(X, subkey)
-            search_direction = -get_neystrom_inv_direction(self.combined_F.f2(X)[0], self.d_prime, f1[0], jrandom_key)
+            search_direction = -neystrom_update_direction(self.combined_F.f2(X)[0], self.d_prime, f1[0], jrandom_key)
 
         return search_direction
 
@@ -140,19 +140,19 @@ class Gradient_Descent(OptimizationBlueprint):
     def step_getter(self, X, jrandom_key, t):
         return -self.combined_F.f1(X)[0]
 
-class FD_Newton_IPM(OptimizationBlueprint):
+class Newton_2FD1_IPM(OptimizationBlueprint):
     def __init__(self, config):
         super().__init__(config)
         self.d_prime = config["optimization_meta"]["d_prime"]
         self.num_samples = config["optimization_meta"]["num_samples"]
-        self.h = config["optimization_meta"]["h"]
+        self.err_bound = config["optimization_meta"]["2FD1_err_bound"]
 
     @partial(jax.jit, static_argnums=(0,))
     def step_getter(self, X, jrandom_key, t):
         combined_F = LinearCombination(self.obj, self.barrier, [1, t])
         jrandom_key, subkey = jrandom.split(jrandom_key)
         f1 = combined_F.f1(X, subkey)
-        approx_H = finite_difference_hessian(combined_F, X, self.h, self.dim)[0]
+        approx_H = FD_2FD1(combined_F, X[0], self.err_bound, self.dim)
 
         H_inv = jnp.linalg.inv(approx_H)
         search_direction = -H_inv.dot(f1[0])
@@ -161,7 +161,7 @@ class FD_Newton_IPM(OptimizationBlueprint):
         return search_direction
 
 
-class Newton_shift_est_IPM(OptimizationBlueprint):
+class Newton_2B1_IPM(OptimizationBlueprint):
     def __init__(self, config):
         super().__init__(config)
         self.d_prime = config["optimization_meta"]["d_prime"]
@@ -173,18 +173,18 @@ class Newton_shift_est_IPM(OptimizationBlueprint):
         combined_F = LinearCombination(self.obj, self.barrier, [1, t])
         jrandom_key, subkey = jrandom.split(jrandom_key)
         f1 = combined_F.f1(X, subkey)
-        approx_H = beta_second_shift_estimator(combined_F, X[0], self.alpha, self.num_samples, jrandom_key)
+        approx_H = beta_2E1(combined_F, X[0], self.alpha, self.num_samples, jrandom_key)
         
         if not self.with_neystrom:
             H_inv = jnp.linalg.inv(approx_H)
             search_direction = -H_inv.dot(f1[0])
         else:
             jrandom_key, subkey = jrandom.split(jrandom_key)
-            search_direction = -get_neystrom_inv_direction(approx_H, self.d_prime, f1[0], jrandom_key) 
+            search_direction = -neystrom_update_direction(approx_H, self.d_prime, f1[0], jrandom_key) 
             
         return search_direction
 
-class Newton_multilevel_est_IPM(OptimizationBlueprint):
+class Newton_multilevel_2B1_IPM(OptimizationBlueprint):
     def __init__(self, config):
         super().__init__(config)
         self.d_prime = config["optimization_meta"]["d_prime"]
@@ -194,7 +194,7 @@ class Newton_multilevel_est_IPM(OptimizationBlueprint):
     @partial(jax.jit, static_argnums=(0,))
     def step_getter(self, X, jrandom_key, t):
         combined_F = LinearCombination(self.obj, self.barrier, [1, t])
-        return multilevel_update_direction(combined_F, X[0], self.alpha, self.num_samples, self.d_prime, jrandom_key)
+        return multilevel_beta_newton_update_2E1_1E1(combined_F, X[0], self.alpha, self.num_samples, self.d_prime, jrandom_key)
 
 
 

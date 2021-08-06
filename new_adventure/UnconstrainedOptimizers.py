@@ -6,9 +6,8 @@ from functools import partial
 from jax import lax
 import time, sys
 import pickle
-from .Functions import LinearCombination, BetaShiftEstimation, GaussianSmoothing
-from .utils import get_barrier, get_potential, woordbury_update
-from .derivative_free_estimation import BFGS_update, new_beta_second_shift_estimator, multilevel_inv_estimator, get_neystrom_inv_direction, multilevel_update_direction
+from .Functions import LinearCombination, GaussianSmoothing
+from .utils import get_barrier, get_potential
 import os, psutil
 process = psutil.Process(os.getpid())
 

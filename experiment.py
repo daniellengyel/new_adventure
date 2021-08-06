@@ -41,7 +41,7 @@ config = {}
 
 
 # particle init 
-dim = 100
+dim = 1000
 config["domain_dim"] = dim
 config["particle_init"] = "origin" # "function_specific"
 config["num_particles"] = 1
@@ -57,21 +57,21 @@ config["potential_meta"] = {"seed": 10, "direction_name": "ones"}#{"seed": 10, "
 
 # optimization
 config["optimization_type"] = "IPM"
-config["optimization_name"] = "Newton_shift_est_IPM"
+config["optimization_name"] = "Newton_2FD1_IPM"
 # "GaussianSmoothing"
 # if ARRAY_INDEX == 0:
-#     config["optimization_name"] = "Newton_shift_est_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
+#     config["optimization_name"] = "Newton_2B1_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
 # elif ARRAY_INDEX == 1:
 #     config["optimization_name"] = "BFGS"
 # else:
 #     config["optimization_name"] = "Newton_IPM"
-# "FD_Newton_IPM"
+# "Newton_2FD1_IPM"
 # "Newton_multilevel_est_IPM"
 # "Gradient_Descent"
 
 config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, "barrier_type": "log",
 								"delta": 0.5, "jrandom_key": 0,
-                                "with_neystrom": False, "d_prime": 1000, "num_samples": 5000, "alpha": 100, "sigma": 0.5, "h": 0.01,
+                                "with_neystrom": False, "d_prime": 1000, "num_samples": 5000, "alpha": 100, "sigma": 0.5, "2FD1_err_bound": 0.5,
                                 "automatic_diff": True}
 
 
