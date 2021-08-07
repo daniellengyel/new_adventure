@@ -57,7 +57,7 @@ config["potential_meta"] = {"seed": 10, "direction_name": "ones"}#{"seed": 10, "
 
 # optimization
 config["optimization_type"] = "IPM"
-config["optimization_name"] = "Newton_2FD1_IPM"
+config["optimization_name"] = "BFGS"
 # "GaussianSmoothing"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_2B1_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
