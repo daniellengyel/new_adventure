@@ -112,11 +112,12 @@ class Gaussian_example2:
 
 class LinearCombination():
 
-    def __init__(self, obj, barrier, weights):
+    def __init__(self, obj, barrier, weights, f1_var=None):
         self.obj = obj
         self.barrier = barrier
         self.funcs = [self.obj, self.barrier]
         self.weights = weights
+        self.f1_var = f1_var
 
     def f(self, X):
         res = jnp.sum(jnp.array([jnp.multiply(w, f.f(X)) for w, f in zip(self.weights, self.funcs)]), axis=0)
@@ -124,6 +125,8 @@ class LinearCombination():
 
     def f1(self, X, jrandom_key=None):
         res = jnp.sum(jnp.array([jnp.multiply(w, f.f1(X, jrandom_key)) for w, f in zip(self.weights, self.funcs)]), axis=0)
+        if self.f1_var is not None and jrandom_key is not None:
+            res += jrandom.normal(key=jrandom_key, shape=X.shape) * self.f1_var**0.5
         return res
 
     def f2(self, X):

@@ -41,13 +41,14 @@ class OptimizationBlueprint:
         self.linesearch = helper_linesearch(self.obj, self.barrier, self.c1, self.c2)
         self.loop_steps_remaining = config["num_total_steps"]
         self.verbose = True
+        self.f1_var = self.config["potential_meta"]["f1_var"]
 
     def update(self, X, time_step, full_vals=False, full_path=False):
         assert not (full_vals and full_path)
 
         t = 4 * (0.5)**(time_step) 
 
-        self.combined_F = LinearCombination(self.obj, self.barrier, [1, t])
+        self.combined_F = LinearCombination(self.obj, self.barrier, [1, t], self.f1_var)
 
         if full_path:
             full_path_arr = [(X.copy(), time.time())]
@@ -59,7 +60,7 @@ class OptimizationBlueprint:
              
             # get search direction
             self.jrandom_key, subkey = jrandom.split(self.jrandom_key)
-            f1 = self.combined_F.f1(X)
+            f1 = self.combined_F.f1(X) 
             search_direction = self.step_getter(X, subkey, t)
             newton_decrement_squared = -f1[0].dot(search_direction)
             
@@ -152,12 +153,12 @@ class Newton_2FD1_IPM(OptimizationBlueprint):
         combined_F = LinearCombination(self.obj, self.barrier, [1, t])
         jrandom_key, subkey = jrandom.split(jrandom_key)
         f1 = combined_F.f1(X, subkey)
-        approx_H = FD_2FD1(combined_F, X[0], self.err_bound, self.dim)
+        jrandom_key, subkey = jrandom.split(jrandom_key)
+        approx_H = FD_2FD1(combined_F, X[0], self.err_bound, self.dim, subkey)
 
         H_inv = jnp.linalg.inv(approx_H)
         search_direction = -H_inv.dot(f1[0])
        
-            
         return search_direction
 
 
@@ -203,7 +204,7 @@ class BFGS(OptimizationBlueprint):
         super().__init__(config)
         self.H_inv = np.eye(config["domain_dim"])
         self.X_prev = None
-        
+
     def step_getter(self, X, jrandom_key, t):
         self.X_prev = X[0].copy()
         f1 = self.combined_F.f1(X)

@@ -76,7 +76,8 @@ def multilevel_beta_inv_2E1(F, x_0, alpha, N, d_prime, jrandom_key):
     jrandom_key, subkey = jrandom.split(jrandom_key)
     sample_points, radius = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey) 
     ru = samples_points - jnp.mean(xs, axis=0)
-    out_grads = F.f1(sample_points)
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    out_grads = F.f1(sample_points, subkey)
     grad_X = grads.T.dot(ru)/float(N) # new_proper_cov(sample_points, out_grads)
     jrandom_key, subkey = jrandom.split(jrandom_key)
     U_idxs = jrandom.choice(subkey, a=d, shape=(d_prime,), replace=False)
@@ -95,7 +96,8 @@ def multilevel_beta_newton_update_2E1_1E1(F, x_0, alpha, N, d_prime, jrandom_key
     jrandom_key, subkey = jrandom.split(jrandom_key)
     sample_points, radius = jax_hit_run(x_0, F, x_0.shape[0], N, alpha, subkey, chosen_basis_idx=U_idxs)  
     ru = (sample_points - jnp.mean(sample_points, axis=0)).T # (d, N)
-    out_grads = F.f1(sample_points)
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    out_grads = F.f1(sample_points, subkey)
 
     gradF = F.f1(jnp.array([x_0]))[0]
     grad_X_low_inv = jnp.linalg.inv(out_grads.T[U_idxs].dot(ru[U_idxs].T)/float(N))
@@ -124,7 +126,6 @@ def beta_second_shift_estimator(F, x_0, alpha, N, jrandom_key):
     A = get_A(sample_points) 
     
     return  2*((second_shift_est - jnp.eye(len(x_0)) * jnp.diag(second_shift_est))/(A*2.) + (jnp.eye(len(x_0)) * jnp.linalg.inv(A).dot(jnp.diag(second_shift_est))))
-
 
 def neystrom_inv(H, d_prime, jrandom_key):
     d = len(H)
@@ -216,13 +217,28 @@ def FD_2FD0(F, X, h, dim):
     return jnp.array(hess)
 
 
-def FD_2FD1(F, x_0, err_bound, dim):
+def FD_2FD1(F, x_0, err_bound, dim, jrandom_key):
     hess = []
+    num_samples = 1
     dists = F.dir_dists(x_0, jnp.eye(dim))
     R = jnp.min(dists[0]).astype(float)
     h = solve_for_h(err_bound, R)
-    nabla_f = F.f1(x_0.reshape(1, -1))[0]
-    return jnp.array([(F.f1((x_0 + h*jnp.eye(dim)[i]).reshape(1, -1))[0] - nabla_f)/h for i in range(dim)])
+    jrandom_key, subkey = jrandom.split(jrandom_key)
+    nabla_f = F.f1(x_0.reshape(1, -1), subkey)[0]
+    I = jnp.eye(dim)
+    H = jnp.zeros(shape=(dim, dim))
+    for i in range(dim):
+        # x_0[i] += h*1
+        jax.ops.index_add(x_0, i, h)
+    
+        curr_grad = jnp.zeros(dim)
+        for _ in range(num_samples):
+            jrandom_key, subkey = jrandom.split(jrandom_key)
+            jax.ops.index_add(curr_grad, jax.ops.index[:], (F.f1(x_0.reshape(1, -1), subkey)[0] - nabla_f)/h)
+        jax.ops.index_update(H, jax.ops.index[i, :], curr_grad/num_samples)
+        # x_0[i] -= h*1
+        jax.ops.index_add(x_0, i, -h)
+    return H
 
 def solve_for_h(err_bound, R, theta=1):
     c = err_bound

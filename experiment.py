@@ -41,7 +41,7 @@ config = {}
 
 
 # particle init 
-dim = 1000
+dim = 500
 config["domain_dim"] = dim
 config["particle_init"] = "origin" # "function_specific"
 config["num_particles"] = 1
@@ -53,11 +53,11 @@ config["domain_meta"] = {"seed": 10, "num_barriers": dim * 5}
 # function
 
 config["potential_name"] = "linear"
-config["potential_meta"] = {"seed": 10, "direction_name": "ones"}#{"seed": 10, "num_tesselations": 10, "tesselation_domain": [-10, 10]} #{"Q": np.array([[1, 0], [0, 1]]) , "estimation_type": "shift_estimator"} #[[1, 0], [0, 1]]
+config["potential_meta"] = {"seed": 10, "direction_name": "ones", "f1_var": None}
 
 # optimization
 config["optimization_type"] = "IPM"
-config["optimization_name"] = "BFGS"
+config["optimization_name"] = "Newton_2FD1_IPM"
 # "GaussianSmoothing"
 # if ARRAY_INDEX == 0:
 #     config["optimization_name"] = "Newton_2B1_IPM" # "Newton_shift_est_IPM" # "BFGS" #  "Newton_IPM" #   #"Newton" 
@@ -71,7 +71,7 @@ config["optimization_name"] = "BFGS"
 
 config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, "barrier_type": "log",
 								"delta": 0.5, "jrandom_key": 0,
-                                "with_neystrom": False, "d_prime": 1000, "num_samples": 5000, "alpha": 100, "sigma": 0.5, "2FD1_err_bound": 0.5,
+                                "with_neystrom": False, "d_prime": 1000, "num_samples": 5000, "alpha": 100, "sigma": 0.5, "2FD1_err_bound": 0.0001,
                                 "automatic_diff": True}
 
 
@@ -80,7 +80,7 @@ config["optimization_meta"] = {"c1": 0.001, "c2": 0.7, "barrier_type": "log",
 config["seed"] = 0
 config["return_full_path"] = False
 config["num_path_steps"] = 15
-config["num_total_steps"] = 1000 
+config["num_total_steps"] = 300 
 
 # --- Set up folder in which to store all results ---
 folder_name = new_adv.save_load.get_file_stamp(config["optimization_name"])
