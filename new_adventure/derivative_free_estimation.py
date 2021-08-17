@@ -219,25 +219,20 @@ def FD_2FD0(F, X, h, dim):
 
 def FD_2FD1(F, x_0, err_bound, dim, jrandom_key):
     hess = []
-    num_samples = 1
+    num_samples = 100
     dists = F.dir_dists(x_0, jnp.eye(dim))
     R = jnp.min(dists[0]).astype(float)
     h = solve_for_h(err_bound, R)
     jrandom_key, subkey = jrandom.split(jrandom_key)
     nabla_f = F.f1(x_0.reshape(1, -1), subkey)[0]
-    I = jnp.eye(dim)
+    X = h*jnp.eye(dim) + x_0
     H = jnp.zeros(shape=(dim, dim))
-    for i in range(dim):
-        # x_0[i] += h*1
-        jax.ops.index_add(x_0, i, h)
-    
-        curr_grad = jnp.zeros(dim)
-        for _ in range(num_samples):
-            jrandom_key, subkey = jrandom.split(jrandom_key)
-            jax.ops.index_add(curr_grad, jax.ops.index[:], (F.f1(x_0.reshape(1, -1), subkey)[0] - nabla_f)/h)
-        jax.ops.index_update(H, jax.ops.index[i, :], curr_grad/num_samples)
-        # x_0[i] -= h*1
-        jax.ops.index_add(x_0, i, -h)
+
+    for _ in range(num_samples):
+        jrandom_key, subkey = jrandom.split(jrandom_key)
+        H = jax.ops.index_add(H, jax.ops.index[:, :], (F.f1(X, subkey) - nabla_f)/h)
+
+    H = H / float(num_samples)
     return H
 
 def solve_for_h(err_bound, R, theta=1):

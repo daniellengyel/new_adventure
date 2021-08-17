@@ -16,8 +16,6 @@ class LogPolytopeBarrier:
         self.bs = jnp.array(bs)
         self.dim = len(ws[0])
 
-        self.jrandom_key = jrandom.PRNGKey(1)
-
     # @partial(jit, static_argnums=(0,))
     def _get_dists(self, xs):
         """We consider the sum of log barrier (equivalent to considering each barrier to be a potential function).
@@ -51,7 +49,8 @@ class LogPolytopeBarrier:
     def f1(self, xs, jrandom_key=None):
         dists, signs = self._get_dists(xs)
         grads = (1/dists * signs).dot((-self.ws / jnp.linalg.norm(self.ws, axis=1).T.reshape(-1, 1)))
-
+        if jrandom_key is not None:
+            grads = grads + jrandom.normal(key=jrandom_key, shape=grads.shape) * 0.2**0.5
         return grads
 
     # @partial(jit, static_argnums=(0,))
